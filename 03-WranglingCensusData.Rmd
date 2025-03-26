@@ -1,0 +1,302 @@
+---
+title: "03-WranglingCensusData"
+output: html_document
+date: "2025-03-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wrangling Census Data
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+```
+
+## Sorting and filtering
+
+-   `arrange(df, column)`, `arrange(df, desc(column))`
+-   `filter()`
+
+```{r}
+median_age <- get_acs(
+  geography = "county", 
+  variables = "B01002_001",
+  year = 2020
+)
+median_age
+```
+
+> Which counties are the *youngest* and *oldest* in the United States as
+> measured by median age?
+
+```{r}
+arrange(median_age, estimate)[1,]
+```
+
+```{r}
+arrange(median_age, desc(estimate))[1,]
+```
+
+How many counties in the US have a median age of 50 or older?
+
+```{r}
+filter(median_age, estimate >= 50) |> 
+  nrow()
+```
+
+## Splitting columns
+
+-   `separate()`
+
+```{r}
+separate(
+  median_age, 
+  NAME, 
+  into = c("county", "state"), 
+  sep = ", "
+)
+```
+
+## Summary variables
+
+Use `summary_var` to get the "total" values for a given table. Useful for
+normalizing across geographies.
+
+```{r}
+race_vars <- c(
+  White = "B03002_003",
+  Black = "B03002_004",
+  Native = "B03002_005",
+  Asian = "B03002_006",
+  HIPI = "B03002_007",
+  Hispanic = "B03002_012"
+)
+nm_race <- get_acs(
+  geography = "county", 
+  state = "NM", 
+  variables = race_vars, 
+  summary_var = "B03002_001", 
+  year = 2020
+)
+nm_race
+```
+
+```{r}
+nm_race_percent <- nm_race |> 
+  mutate(percent = 100 * estimate / summary_est) |> 
+  select(NAME, variable, percent)
+nm_race_percent
+```
+
+## Grouping
+
+Identify the largest racial or ethnic group in each county.
+
+```{r}
+largest_group <- nm_race_percent |> 
+  group_by(NAME) |> 
+  filter(percent == max(percent))
+largest_group
+```
+
+Identify the median percentage for each of the racial & ethnic groups in the
+dataset across counties
+
+```{r}
+nm_race_percent |> 
+  group_by(variable) |> 
+  summarise(median_pct = median(percent))
+```
+
+## New groups
+
+1.  recode the ACS variables into wider income bands
+2.  group the data by the wider income bands
+3.  calculate grouped sums to generate new estimates.
+
+```{r}
+nm_hh_income <- get_acs(
+  geography = "county", 
+  table = "B19001", 
+  state = "NM", 
+  year = 2016
+)
+print(nm_hh_income[1:10,])
+```
+
+However, let's say we only need three income categories for purposes of
+analysis: below \$35,000/year, between \$35,000/year and \$75,000/year, and
+\$75,000/year and up.
+
+```{r}
+nm_hh_income_recode <- nm_hh_income |> 
+  filter(variable != "B19001_001") |> 
+  mutate(incgroup = case_when(
+    variable < "B19001_008" ~ "below35k", 
+    variable < "b19001_013" ~ "bs35land75k", 
+    TRUE ~ "above75k"
+  ))
+nm_hh_income_recode
+```
+
+```{r}
+nm_group_sums <- nm_hh_income_recode |> 
+  group_by(NAME, incgroup) |> 
+  summarise(estimate = sum(estimate))
+nm_group_sums
+```
+
+## Estimates over time
+
+> caveats:
+>
+> -   names, eg. county names, can change
+> -   variable ids are unique to the year and may be different across
+>     datasets
+
+The safest option for time-series analysis in the ACS is to use the
+Comparison Profile Tables.
+
+```{r}
+nm_income_compare <- get_acs(
+  geography = "county", 
+  variables = c(
+    income15 = "CP03_2015_062",
+    income20 = "CP03_2020_062"
+  ), 
+  state = "NM", 
+  year = 2020
+)
+nm_income_compare
+```
+
+Let's re-engineer the analysis above on educational attainment in Colorado
+counties, which below will be computed for a time series from 2010 to 2019.
+Information on "bachelor's degree or higher" is split by sex and across
+different tiers of educational attainment in the detailed tables, found in
+ACS table 15002. Given that we only need a few variables (representing
+estimates of populations age 25+ who have finished a 4-year degree or
+graduate degrees, by sex), we'll request those variables directly rather
+than the entire B15002 table.
+
+```{r}
+college_vars <- c("B15002_015",
+                  "B15002_016",
+                  "B15002_017",
+                  "B15002_018",
+                  "B15002_032",
+                  "B15002_033",
+                  "B15002_034",
+                  "B15002_035")
+```
+
+## Iterating across years
+
+```{r}
+years <- 2010:2019
+names(years) <- years
+
+college_by_year <- map_dfr(years, ~{
+  get_acs(
+    geography = "county", 
+    variables = college_vars, 
+    state = "NM", 
+    summary_var = "B15002_001", 
+    year = .x
+  )
+}, .id = "year")
+college_by_year |> 
+  arrange(NAME, variable, year)
+```
+
+```{r}
+percent_college_by_year <- college_by_year |> 
+  group_by(NAME, year) |> 
+  summarise(numerator = sum(estimate), 
+            denominator = first(summary_est)) |> 
+  mutate(pct_college = 100 * numerator / denominator) |> 
+  pivot_wider(id_cols = NAME, 
+              names_from = year, 
+              values_from = pct_college)
+percent_college_by_year
+```
+
+## Margins of error
+
+By default, MOEs are returned at a 90 percent confidence level.
+
+```{r}
+get_acs(
+  geography = "county",
+  state = "Rhode Island",
+  variables = "B19013_001",
+  year = 2020
+)
+```
+
+```{r}
+get_acs(
+  geography = "county",
+  state = "Rhode Island",
+  variables = "B19013_001",
+  year = 2020, 
+  moe_level = 99
+)
+```
+
+The variables that represent estimates for populations age 65 and up; this
+includes `B01001_020` through `B01001_025` for males, and `B01001_044`
+through `B01001_049` for females.
+
+```{r}
+vars <- paste0("B01001_0", c(20:25, 44:49))
+vars
+```
+
+```{r}
+nola <- get_acs(
+  geography = "tract", 
+  variables = vars, 
+  state = "Louisiana", 
+  county = "Orleans",
+  year = 2020
+)
+```
+
+We will now want to examine the margins of error around the estimates in the
+returned data. Let's focus on a specific Census tract in Salt Lake County
+using [`filter()`](https://dplyr.tidyverse.org/reference/filter.html):
+
+```{r}
+example_tract <- nola |> 
+  filter(GEOID == "22071000100")
+
+example_tract |> select(-NAME)
+```
+A potential solution to large margins of error for small estimates in the ACS is to aggregate data upwards until a satisfactory margin of error to estimate ratio is reached. The US Census Bureau publishes formulas for appropriately calculating margins of error around such derived estimates, which are included in tidycensus with the following functions:
+
+    moe_sum(): calculates a margin of error for a derived sum;
+    moe_product(): calculates a margin of error for a derived product;
+    moe_ratio(): calculates a margin of error for a derived ratio;
+    moe_prop(): calculates a margin of error for a derived proportion.
+
+In their most basic form, these functions can be used with constants. For example, let’s say we had an ACS estimate of 25 with a margin of error of 5 around that estimate. The appropriate denominator for this estimate is 100 with a margin of error of 3. To determine the margin of error around the derived proportion of 0.25, we can use moe_prop():
+```{r}
+moe_prop(25, 100, 5, 3)
+```
+Given that the smaller age bands in the Salt Lake City dataset are characterized by too much uncertainty for our analysis, we decide in this scenario to aggregate our data upwards to represent populations aged 65 and older by sex.
+```{r}
+nola_grouped <- nola |> 
+  mutate(sex = case_when(
+    str_sub(variable, start = -2) < "26" ~ "Male", 
+    TRUE ~ "Female"
+  )) |> 
+  group_by(GEOID, sex) |> 
+  summarize(sum_est = sum(estimate), 
+            sum_moe = moe_sum(moe, estimate))
+nola_grouped
+```
+
