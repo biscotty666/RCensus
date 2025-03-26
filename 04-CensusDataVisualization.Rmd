@@ -1,0 +1,536 @@
+---
+title: "04-CensusVisualization"
+output: html_document
+date: "2025-03-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Visualization
+
+## Basics
+
+```{r}
+library(tidycensus)
+```
+
+```{r}
+nm_wide <- get_acs(
+  geography = "county", 
+  state = "New Mexico", 
+  variables = c(medinc = "B19013_001", 
+                medage = "B01002_001"), 
+  output = "wide",
+  year = 2020
+)
+nm_wide
+```
+
+```{r}
+library(tidyverse)
+options(scipen = 999) # avoid scientific notation
+
+ggplot(nm_wide, aes(x = medincE)) +
+  geom_histogram(bins = 15)
+```
+
+```{r}
+ggplot(nm_wide, aes(y = medincE)) +
+  geom_boxplot()
+```
+
+## Multivariate relationships
+
+```{r}
+ggplot(nm_wide, aes(x = medageE, y = medincE)) +
+  geom_point()
+```
+
+```{r}
+ggplot(nm_wide, aes(x = medageE, y = medincE)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+## Customizing visualizations
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+```
+
+In this example, we will create a visualization that illustrates the percent
+of commuters that take public transportation to work for the largest
+metropolitan areas in the United States. The data come from the 2019 1-year
+American Community Survey Data Profile, variable `DP03_0021P`.
+
+```{r}
+metros <- get_acs(
+  geography = "cbsa", 
+  variables = "DP03_0021P", 
+  summary_var = "B01003_001", 
+  survey = "acs1", 
+  year = 2019
+) |> 
+  slice_max(summary_est, n = 20)
+metros
+```
+
+```{r}
+ggplot(metros, aes(x = NAME, y = estimate)) +
+  geom_col()
+```
+
+> Simplify the names
+
+```{r}
+metro_plot <- metros |> 
+  mutate(NAME = str_remove(NAME, "-.*$")) |> 
+  mutate(NAME = str_remove(NAME, ",.*$")) |> 
+  ggplot(aes(y = reorder(NAME, estimate), x = estimate)) +
+  geom_col()
+metro_plot
+```
+
+```{r}
+metro_plot <- metro_plot +
+  theme_minimal() +
+  labs(title = "Public transit commute share", 
+       subtitle = "2019 1-year ACS estimates",
+       y = "",
+       x = "ACS estimate", 
+       caption = "Source: ACS Data Profile variable DP03_0021P")
+metro_plot
+```
+
+```{r}
+library(scales)
+```
+
+```{r}
+metro_transit <- metros |> 
+  mutate(NAME = str_remove(NAME, "-.*$")) %>%
+  mutate(NAME = str_remove(NAME, ",.*$")) %>%
+  ggplot(aes(y = reorder(NAME, estimate), x = estimate)) + 
+  geom_col(color = "navy", fill = "navy", 
+           alpha = 0.5, width = 0.85) +
+  theme_minimal(base_size = 12, base_family = "Verdana") +
+  scale_x_continuous(labels = label_percent(scale = 1)) +
+  labs(title = "Public transit commute share", 
+       subtitle = "2019 1-year ACS estimates",
+       y = "",
+       x = "ACS estimate", 
+       caption = "Source: ACS Data Profile variable DP03_0021P")
+metro_transit
+```
+
+## Exporting visualizations
+
+```{r}
+ggsave("metro_transit.png")
+```
+
+```{r}
+ggsave(
+  filename = "metro_transit.png",
+  path = "./images",
+  width = 8,
+  height = 5, 
+  units = "in", 
+  dpi = 300
+)
+```
+
+## Visualizing margins of error
+
+```{r}
+new_mexico <- get_decennial(
+  state = "New Mexico", 
+  geography = "county",
+  variables = c(totalpop = "P1_001N"),
+  year = 2020
+) |> arrange(desc(value))
+new_mexico
+```
+
+Estimates for the counties with smaller population sizes are likely to be
+subject to a larger margin of error than those with larger baseline
+populations. Comparing median household incomes of these sixteen counties
+illustrates this point.
+
+```{r}
+nm_income <- get_acs(
+  state = "New Mexico", 
+  geography = "county", 
+  variables = c(hhincome = "B19013_001"), 
+  year = 2020
+) |> 
+  mutate(NAME = str_remove(NAME, " County, New Mexico"))
+nm_income
+```
+
+```{r}
+nm_income |> 
+  ggplot(aes(x = estimate, y = reorder(NAME, estimate))) +
+  geom_point(size = 2, color = "darkgreen") +
+  labs(title = "Median household income", 
+       subtitle = "Counties in New Mexico", 
+       x = "", 
+       y = "ACS estimate") +
+  theme_minimal(base_size = 11) +
+  scale_x_continuous(labels = label_dollar())
+```
+
+## Error bars
+
+```{r}
+nm_income |> 
+  arrange(desc(moe))
+```
+
+```{r}
+nm_income |> 
+  ggplot(aes(x = estimate, y = reorder(NAME, estimate))) +
+  geom_errorbar(aes(xmin = estimate - moe, xmax = estimate + moe)) +
+  geom_point(size = 2, color = "gold") +
+  theme_minimal(base_size = 10) +
+  labs(title = "Median household income", 
+       subtitle = "Counties in Maine", 
+       x = "2016-2020 ACS estimate", 
+       y = "") + 
+  scale_x_continuous(labels = label_dollar())  
+```
+
+## Visualizing estimates over time
+
+```{r}
+years <- 2005:2019
+names(years) <- years
+
+bernalillo_value <- map_dfr(years, ~{
+  get_acs(
+    geography = "county", 
+    variables = "B25077_001",
+    state = "New Mexico",
+    county = "Bernalillo",
+    year = .x,
+    survey = "acs1"
+  )
+}, .id = "year")
+bernalillo_value
+```
+
+```{r}
+bernalillo_value |> 
+  ggplot(aes(x = year, y = estimate, group = 1)) +
+  geom_line() +
+  geom_point()
+```
+
+```{r}
+santa_fe_value <- map_dfr(years, ~{
+  get_acs(
+    geography = "county", 
+    variables = "B25077_001",
+    state = "New Mexico",
+    county = "Santa Fe",
+    year = .x,
+    survey = "acs1"
+  )
+}, .id = "year")
+santa_fe_value |> 
+  ggplot(aes(x = year, y = estimate, group = 1)) +
+  geom_line() +
+  geom_point()
+```
+
+```{r}
+bernalillo_value |> 
+  ggplot(aes(x = year, y = estimate, group = 1)) +
+  geom_ribbon(aes(ymax = estimate + moe, ymin = estimate - moe),
+              fill = "aquamarine", alpha = 0.4) +
+  geom_line(color = "gold") +
+  geom_point(color = "firebrick") +
+  theme_minimal(base_size = 12) +
+  scale_y_continuous(labels = label_dollar(scale = .001, suffix = "k")) +
+  labs(title = "Med home value in Bernalillo County, NM", 
+       x = "Year", 
+       y = "ACS estimate",
+       caption = "Shaded area represents ACS margin of error")
+```
+
+## Population pyramids
+
+Population pyramids are typically constructed by visualizing population size
+or proportion on the x-axis; age cohort on the y-axis; and sex is
+represented categorically with male and female bars mirrored around a
+central axis.
+
+```{r}
+nm <- get_estimates(
+  geography = "state", 
+  state = "NM", 
+  product = "characteristics",
+  breakdown = c("SEX", "AGEGROUP"),
+  breakdown_labels = T,
+  year = 2019
+)
+nm
+```
+
+> Processing
+>
+> -   remove "Both sexes" rows
+> -   remove rows for "All ages"
+> -   to achieve the mirroring, convert all Male values to negative
+
+```{r}
+nm_filtered <- nm |> 
+  filter(str_detect(AGEGROUP, "^Age"),
+         SEX != "Both sexes") |> 
+  mutate(value = ifelse(SEX == "Male", -value, value))
+nm_filtered
+```
+
+```{r}
+nm_filtered |> 
+  ggplot(aes(x = value, y = AGEGROUP, fill = SEX)) +
+  geom_col()
+```
+
+-   specify appropriate chart labels
+-   format the axis tick labels by using appropriate `scale_*` functions
+-   set the X-axis limits to show both sides of 0 equally. In particular,
+    this involves the use of custom absolute values to represent population
+    sizes, and the removal of redundant age group information
+-   use
+    [`theme_minimal()`](https://ggplot2.tidyverse.org/reference/ggtheme.html),
+    which uses a white background with muted gridlines.
+
+```{r}
+nm_pyramid <- nm_filtered |> 
+  ggplot(aes(y = AGEGROUP, 
+             x = value, 
+             fill = SEX)) +
+  geom_col(width = 0.95, alpha = 0.75) +
+  theme_minimal(base_family = "Verdana", base_size = 12) +
+  scale_x_continuous(
+    labels = ~ number_format(scale = .001, suffix = "k")(abs(.x)),
+    limits = 100000 * c(-1,1)
+  ) +
+  scale_y_discrete(labels = ~ str_remove_all(.x, "Age\\s|\\syears")) +
+  scale_fill_manual(values = c("firebrick","aquamarine")) +
+  labs(x = "", 
+       y = "2019 Census Bureau population estimate", 
+       title = "Population structure in New Mexico", 
+       fill = "", 
+       caption = "Data source: US Census Bureau population estimates & tidycensus R package")
+nm_pyramid
+
+```
+
+## Group-wise comparisons
+
+```{r}
+housing_val <- get_acs(
+  geography = "tract", 
+  variables = "B25077_001",
+  state = "NM", 
+  county = c(
+    "Bernalillo", 
+    "Sandoval", 
+    "Los Alamos", 
+    "Santa Fe",
+    "Dona Ana",
+    "McKinley"
+  ),
+  year = 2020
+)
+housing_val
+```
+
+```{r}
+housing_val2 <- housing_val |> 
+  separate(
+    NAME, into = c("tract","county","state"),
+    sep = ", "
+  )
+housing_val2
+```
+
+```{r}
+housing_val2 |> 
+  group_by(county) |> 
+  summarise(min = min(estimate, na.rm = T), 
+            mean = mean(estimate, na.rm = T), 
+            median = median(estimate, na.rm = T), 
+            max = max(estimate, na.rm = T))
+```
+
+```{r}
+housing_val2 |> 
+  ggplot(aes(x = estimate)) +
+  geom_density()
+```
+
+```{r}
+housing_val2 |> 
+  ggplot(aes(x = estimate, fill = county)) +
+  geom_density(alpha = 0.3)
+```
+
+```{r}
+housing_val2 |> 
+  ggplot(aes(x = estimate)) +
+  geom_density(fill = "orange", color = "red", alpha = 0.5) +
+  facet_wrap(~county) +
+  scale_x_continuous(label = dollar_format(scale = .001,
+                                           suffix = "k")) +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.y = element_blank(), 
+        axis.text.x = element_text(angle = 45)) +
+  labs(x = "ACS estimate", 
+       y = "",
+       title = "Median home value by census tract, 2015-2019 ACS")
+```
+
+## ggridges
+
+```{r}
+library(ggridges)
+```
+
+```{r}
+housing_val2 |> 
+  ggplot(aes(x = estimate, y = county)) +
+  geom_density_ridges() +
+  theme_ridges() +
+  labs(x = "Median home value: 2016-2020 ACS estimate", 
+       y = "") +
+  scale_x_continuous(labels = label_dollar(scale = .001, suffix = "k", 
+                                           breaks = c(0, 5e5, 1e6))) +
+  theme(axis.text.x = element_text(angle = 45))
+  
+```
+
+```{r}
+library(ggbeeswarm)
+```
+
+```{r}
+race_vars <- c(
+  White = "B03002_003",
+  Black = "B03002_004",
+  Native = "B03002_005",
+  Asian = "B03002_006",
+  Hispanic = "B03002_012"
+)
+abq_race_income <- get_acs(
+  geography = "tract", 
+  state = "NM",
+  county = c("Bernalillo", "Sandoval"),
+  variables = race_vars,
+  summary_var = "B19013_001", 
+  year = 2020
+)
+abq_race_income <- abq_race_income |> 
+  group_by(GEOID) |> 
+  filter(estimate == max(estimate, na.rm = T)) |> 
+  ungroup() |> 
+  filter(estimate != 0)
+```
+
+```{r}
+abq_race_income |> 
+  ggplot(aes(x = variable, y = summary_est, color = summary_est)) +
+  geom_quasirandom(alpha = 0.5) +
+  coord_flip() +
+  theme_minimal(base_size = 12) +
+  scale_color_viridis_c(guide = "none") +
+  scale_y_continuous(labels = label_dollar()) +
+  labs(x = "Largest group in Census tract", 
+       y = "Median household income", 
+       title = "Household income distribution by largest racial/ethnic group", 
+       subtitle = "Census tracts, Albuquerque Area", 
+       caption = "Data source: 2016-2020 ACS")  
+```
+
+```{r}
+library(geofacet)
+ggplot(nm_filtered, aes(x = prop, y = AGEGROUP, fill = SEX)) + 
+  geom_col(width = 1) + 
+  theme_minimal() + 
+  scale_fill_manual(values = c("darkred", "navy")) + 
+  facet_geo(~ NAME, grid = "us_nm_counties_grid1",
+            label = "code") + 
+  theme(axis.text = element_blank(),
+        strip.text.x = element_text(size = 8)) + 
+  labs(x = "", 
+       y = "", 
+       title = "Population structure by age and sex", 
+       fill = "", 
+       caption = "Data source: US Census Bureau population estimates & tidycensus R package")
+```
+
+```{r}
+
+```
+
+```{r}
+nm_pyramid_data <-  get_estimates(
+  geography = "county",
+  state = "NM",
+  product = "characteristics",
+  breakdown = c("SEX", "AGEGROUP"),
+  breakdown_labels = TRUE,
+  year = 2019
+) %>%
+  filter(str_detect(AGEGROUP, "^Age"),
+         SEX != "Both sexes") %>%
+  group_by(NAME) %>%
+  mutate(prop = value / sum(value, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(prop = ifelse(SEX == "Male", -prop, prop))
+nm_pyramid_data
+```
+
+```{r}
+nm_pyramid_data <- nm_pyramid_data |> 
+  separate(
+    NAME, into = c("county","state"),
+    sep = ", "
+  )
+nm_pyramid_data
+```
+
+```{r}
+nm_pyramid_data <- nm_pyramid_data |> 
+  mutate(county = str_remove(county, " County$"))
+nm_pyramid_data
+```
+
+```{r}
+
+ggplot(nm_pyramid_data, aes(x = prop, y = AGEGROUP, fill = SEX)) + 
+  geom_col(width = 1) + 
+  theme_minimal() + 
+  scale_fill_manual(values = c("darkred", "navy")) + 
+  facet_geo(~county, grid = "us_nm_counties_grid1",
+            label = "county") + 
+  theme(axis.text = element_blank(),
+        strip.text.x = element_text(size = 8)) + 
+  labs(x = "", 
+       y = "", 
+       title = "Population structure by age and sex", 
+       fill = "", 
+       caption = "Data source: US Census Bureau population estimates & tidycensus R package")
+```
+
+## Plotly
+
+```{r}
+library(plotly)
+ggplotly(nm_pyramid)
+```
