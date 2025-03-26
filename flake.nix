@@ -25,6 +25,9 @@
             rPackages.terra
             rPackages.leaflet
             rPackages.leaflet_extras
+            rPackages.ggridges
+            rPackages.geofacet
+            rPackages.ggbeeswarm
             rPackages.leaflet_extras2
             rPackages.leafsync
             rPackages.spdep
