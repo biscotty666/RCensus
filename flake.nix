@@ -25,6 +25,7 @@
             rPackages.terra
             rPackages.leaflet
             rPackages.leaflet_extras
+            rPackages.crsuggest
             rPackages.ggridges
             rPackages.geofacet
             rPackages.ggbeeswarm
