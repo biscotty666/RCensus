@@ -1,0 +1,157 @@
+---
+title: "07.1-SpatialOverlay"
+output: html_document
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Spatial joins
+
+## Point in polygon
+
+```{r}
+library(tidyverse)
+library(sf)
+library(tidycensus)
+library(mapview)
+```
+
+```{r}
+gainesville_patients <- tibble(
+  patient_id = 1:10,
+  longitude = c(-82.308131, -82.311972, -82.361748, -82.374377, 
+                -82.38177, -82.259461, -82.367436, -82.404031, 
+                -82.43289, -82.461844),
+  latitude = c(29.645933, 29.655195, 29.621759, 29.653576, 
+               29.677201, 29.674923, 29.71099, 29.711587, 
+               29.648227, 29.624037)
+)
+```
+
+```{r}
+gainesvill_sf <- gainesville_patients |> 
+  st_as_sf(coords = c("longitude", "latitude"),
+           crs = 4326) |> 
+  st_transform(6440)
+```
+
+```{r}
+mapview(
+  gainesvill_sf,
+  col.regions = "red",
+  legend = F
+)
+```
+
+> Get the health insurance data
+
+```{r}
+alachua_insurance <- get_acs(
+  geography = "tract",
+  variables = "DP03_0096P",
+  state = "FL",
+  county = "Alachua",
+  year = 2019, 
+  geometry = T
+) |> 
+  select(GEOID, pct_insured = estimate, 
+         pct_insured_moe = moe) |> 
+  st_transform(6440)
+```
+
+```{r}
+mapview(
+  alachua_insurance,
+  zcol = "pct_insured",
+  layer.name = "% with health</br>insurance"
+) +
+  mapview(
+    gainesvill_sf,
+    col.regions = "red",
+    legend = F
+  )
+```
+
+```{r}
+patients_joined <- st_join(
+  gainesvill_sf,
+  alachua_insurance
+)
+patients_joined
+```
+
+## Group-wise spatial analysis
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(sf)
+
+# CRS: NAD83(2011) / Texas Centric Albers Equal Area
+nm_cbsa <- get_acs(
+  geography = "cbsa",
+  variables = "B01003_001",
+  year = 2019,
+  survey = "acs1",
+  geometry = TRUE
+) %>%
+  filter(str_detect(NAME, "NM")) %>%
+  slice_max(estimate, n = 4) %>%
+  st_transform(32113)
+nrow(nm_cbsa)
+```
+
+```{r}
+pct_hispanic <- get_acs(
+  geography = "tract",
+  variables = "DP05_0071P",
+  state = "NM",
+  year = 2019,
+  geometry = TRUE
+) |> 
+  st_transform(32113)
+nrow(pct_hispanic)
+```
+
+> Compute and visualize spatial join
+
+```{r}
+hispanic_by_metro <- st_join(
+  pct_hispanic,
+  nm_cbsa,
+  join = st_within,
+  suffix = c("_tracts", "_metro"),
+  left = F # inner join
+)
+nrow(pct_hispanic)
+nrow(hispanic_by_metro)
+```
+
+```{r}
+hispanic_by_metro |> 
+  mutate(NAME_metro = str_replace(NAME_metro, ", NM Metro Area", "")) |> 
+  ggplot() +
+  geom_density(aes(x = estimate_tracts), 
+               color = "navy", fill = "navy",
+               alpha = 0.4) +
+  theme_minimal() +
+  facet_wrap(~NAME_metro) +
+  labs(title = "Distribution of Hispanic/Latino population by Census tract",
+       subtitle = "Largest metropolitan areas in New Mexico",
+       y = "Kernel density estimate",
+       x = "Percent Hispanic/Latino in Census tract")
+```
+
+```{r}
+median_by_metro <- hispanic_by_metro |> 
+  group_by(NAME_metro) |> 
+  summarise(median_hispanic = median(estimate_tracts, na.rm=T))
+median_by_metro
+```
+
+```{r}
+plot(median_by_metro[1,]$geometry)
+```
