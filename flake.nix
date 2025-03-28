@@ -32,6 +32,7 @@
             rPackages.leaflet_extras2
             rPackages.leafsync
             rPackages.spdep
+            rPackages.ggiraph
             rPackages.maps
             rPackages.devtools
             rPackages.flowmapblue
@@ -40,6 +41,8 @@
             rPackages.wbstats
             rPackages.spocc
             rPackages.chirps
+            rPackages.rosm
+            rPackages.mapboxapi
             rPackages.elevatr
             rPackages.patchwork
             rPackages.XML

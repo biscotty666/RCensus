@@ -1,0 +1,338 @@
+---
+title: "06.2-CartographicWorkflows"
+output: html_document
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cartographic workflows with non-Census Data
+
+## National election mapping with tigris shapes
+
+```{r}
+library(tidyverse)
+library(tigris)
+```
+
+```{r}
+# Data source: https://cookpolitical.com/2020-national-popular-vote-tracker
+vote2020 <- read_csv("data/votes.csv")
+```
+
+```{r}
+names(vote2020)
+```
+
+```{r}
+spec(vote2020)
+```
+
+```{r}
+us_states <- states(cb = T, resolution = "20m") |> 
+  filter(NAME != "Puerto Rico") |> 
+  shift_geometry()
+
+us_states_joined <- us_states |> 
+  left_join(vote2020, by = c("NAME" = "state"))
+```
+
+Before proceeding we’ll want to do some quality checks. In
+[`left_join()`](https://dplyr.tidyverse.org/reference/mutate-joins.html),
+values must match exactly between `NAME` and `state` to merge correctly -
+and this is not always guaranteed when using data from different sources.
+Let’s check to see if we have any problems:
+
+```{r}
+table(is.na(us_states_joined$state))
+```
+
+```{r}
+setdiff(vote2020$state, us_states$NAME)
+```
+
+```{r}
+us_states_joined |> ggplot(aes(fill = called)) +
+  geom_sf(color = "white", lwd = 0.2) +
+  scale_fill_manual(values = c("blue", "red")) +
+  theme_void() +
+  labs(fill = "Party", 
+       title = "2020 Presidential Election Results", 
+       caption = "Note: Nebraska and Maine split electoral college votes by congressional district")
+```
+
+## Working with ZCTAs (zip codes)
+
+The US Census Bureau allows for an approximation of zip code mapping with
+Zip Code Tabulation Areas, or ZCTAs. ZCTAs are shapes built from Census
+blocks in which the most common zip code for addresses in each block
+determines how blocks are allocated to corresponding ZCTAs. While ZCTAs are
+not recommended for spatial analysis due to these irregularities, they can
+be useful for visualizing data distributions when no other granular
+geographies are available.
+
+An example of this is the [Internal Revenue Service’s Statistics of Income
+(SOI)
+data](https://www.irs.gov/statistics/soi-tax-stats-individual-income-tax-statistics-2018-zip-code-data-soi),
+which includes a wide range of indicators derived from tax returns. The most
+detailed geography available is the zip code level in this dataset, meaning
+that within-county visualizations require using ZCTAs. Let’s read in the
+data for 2018 from the IRS website:
+
+```{r}
+irs_data <- read_csv("https://www.irs.gov/pub/irs-soi/18zpallnoagi.csv")
+ncol(irs_data)
+```
+
+The dataset contains 153 columns [which are identified in the linked
+codebook](https://www.irs.gov/pub/irs-soi/18zpdoc.docx). Geographies are
+identified by the `ZIPCODE` column, which shows aggregated data by state
+(`ZIPCODE == "000000"`) and by zip code. We might be interested in
+understanding the geography of self-employment income within a given region.
+We’ll retain the variables `N09400`, which represents the number of tax
+returns with self-employment tax, and `N1`, which represents the total
+number of returns.
+
+```{r}
+self_employment <- irs_data |> 
+  select(ZIPCODE, self_emp = N09400, total = N1)
+```
+
+```{r}
+library(mapview)
+library(tigris)
+options(tigris_use_cache = T)
+
+abq_zctas <- zctas(
+  cb = T,
+  starts_with = c("871"),
+  year = 2018
+)
+
+mapview(abq_zctas)
+```
+
+```{r}
+names(abq_zctas)
+```
+
+```{r}
+abq_se_data <- abq_zctas |> 
+  left_join(self_employment, by = c("GEOID10" = "ZIPCODE")) |> 
+  mutate(pct_se = 100 * self_emp / total) |> 
+  select(GEOID10, self_emp, pct_se)
+abq_se_data
+```
+
+```{r}
+library(tmap)
+tm_shape(abq_se_data, projection = 32113) +
+  tm_fill(col = "pct_se", palette = "Purples") +
+  tm_title("% self-employed\n2010 IRS Data")
+```
+
+The choropleth map shows that self-employment filings are more common in
+suburban Boston ZCTAs than nearer to the urban core, generally speaking.
+However, we might also be interested in understanding where most
+self-employment income filings are located rather than their share relative
+to the total number of returns filed. This requires visualizing the
+`self_emp` column directly. As discussed earlier in this chapter, a
+graduated symbol map with
+[`tm_bubbles()`](https://rdrr.io/pkg/tmap/man/tm_symbols.html) is preferable
+to a choropleth map for this purpose.
+
+```{r}
+tm_shape(abq_se_data) +
+  tm_polygons() +
+  tm_bubbles(size = "self_emp", fill_alpha = 0.5, 
+             col = "navy", 
+             title.size = "Self-employed filers,\n2018 IRS SOI data")
+```
+
+# Interactive mapping
+
+Let’s start by getting some illustrative data on the percentage of the
+population aged 25 and up with a bachelor’s degree or higher from the
+2016-2020 ACS.
+
+```{r}
+library(tidycensus)
+bern_bachelors <- get_acs(
+  geography = "tract",
+  variables = "DP02_0068P",
+  state = "NM", 
+  county = "Bernalillo",
+  year = 2020,
+  geometry = T
+)
+```
+
+```{r}
+library(mapview)
+mapview(bern_bachelors, zcol = "estimate")
+```
+
+```{r}
+ttm()
+tm_shape(bern_bachelors) +
+  tm_fill(col = "estimate", palette = "magma",
+          alpha = 0.5)
+ttm()
+```
+
+## Leaflet
+
+```{r}
+library(leaflet)
+
+pal <- colorNumeric(
+  palette = "magma",
+  domain = bern_bachelors$estimate
+)
+
+pal(c(10, 20, 30, 40, 50))
+```
+
+```{r}
+leaflet() |> 
+  addProviderTiles(providers$Stadia.StamenTonerLite) |> 
+  addPolygons(data = bern_bachelors, 
+              color = ~pal(estimate),
+              weight = 0.5, 
+              smoothFactor = 0.2,
+              fillOpacity = 0.5,
+              label = ~estimate) |> 
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = bern_bachelors$estimate,
+    title = "% with bachelor's<br/>degree"
+  )
+```
+
+```{r}
+library(ggiraph)
+library(scales)
+
+us_value <- get_acs(
+  geography = "state",
+  variables = "B25077_001",
+  year = 2019,
+  survey = "acs1",
+  geometry = TRUE,
+  resolution = "20m"
+)
+
+us_value_shifted <- us_value |> 
+  shift_geometry(position = "outside") |> 
+  mutate(tooltip = paste(NAME, estimate, sep = ": "))
+
+gg <- ggplot(us_value_shifted, aes(fill = estimate)) +
+  geom_sf_interactive(aes(tooltip = tooltip, data_id = NAME), 
+                      size = 0.1) +
+  scale_fill_viridis_c(option = "plasma", labels = label_dollar()) +
+  labs(title = "Median housing value by State, 2019",
+       caption = "Data source: 2019 1-year ACS, US Census Bureau",
+       fill = "ACS estimate") + 
+  theme_void()   
+
+gg
+```
+
+```{r}
+girafe(ggobj = gg) |> 
+  girafe_options(opts_hover(css = "fill:cyan"),
+                 opts_zoom(max = 10))
+```
+
+## Migration flows
+
+```{r}
+abq_inflows <- get_flows(
+  geography = "county",
+  state = "NM",
+  county = "Bernalillo",
+  geometry = T
+) |> 
+  filter(variable == "MOVEDIN") |> 
+  na.omit() |> 
+  arrange(desc(estimate))
+abq_inflows
+```
+
+```{r}
+library(mapdeck)
+
+key <- "pk.eyJ1IjoiYmlzY290dHkiLCJhIjoiY2x0azc2eGo5MHhkYTJqb3lndG44bjN3OSJ9.KVJqBYZMqDW_E9JisfCiLg"
+
+abq_inflows |> 
+  slice_max(estimate, n = 30) |> 
+  mutate(weight = estimate / 500) |> 
+  mapdeck(token = key) |> 
+  add_arc(origin = "centroid2",
+          destination = "centroid1",
+          stroke_width = "weight", 
+          update_view = F)
+```
+
+## Linking maps and charts
+
+### Choropleth with margin of error plot
+
+```{r}
+library(tidycensus)
+library(ggiraph)
+library(tidyverse)
+library(patchwork)
+library(scales)
+```
+
+```{r}
+nm_income <- get_acs(
+  geography = "county",
+  variables = "B19013_001",
+  state = "NM",
+  year = 2020,
+  geometry = T
+) |> 
+  mutate(NAME = str_remove(NAME, " County, New Mexico"))
+```
+
+```{r}
+nm_map <- ggplot(nm_income, aes(fill = estimate)) +
+  geom_sf_interactive(aes(data_id = GEOID)) +
+  scale_fill_distiller(palette = "Reds",
+                       direction = 1,
+                       guide = "none") +
+  theme_void()
+```
+
+```{r}
+nm_plot <- ggplot(nm_income, aes(x = estimate,
+                                 y = reorder(NAME, estimate),
+                                 fill = estimate)) +
+  geom_errorbar(aes(xmin = estimate - moe, xmax = estimate + moe)) +
+  geom_point_interactive(aes(data_id = GEOID),
+                         color = "black", size = 4, shape = 21) +
+  scale_fill_distiller(palette = "Reds", direction = 1,
+                       labels = label_dollar()) +
+  scale_x_continuous(labels = label_dollar()) +
+  labs(title = "New Mexico household income by county",
+       subtitle = "2016-2020 American Community Survey",
+       y = "", x = "ACS estimate (bars represent margin of error",
+       fill = "ACS estimate") +
+  theme_minimal(base_size = 14)
+```
+
+```{r}
+library(patchwork)
+nm_map + nm_plot
+```
+
+```{r}
+girafe(ggobj = nm_map + nm_plot,
+       width_svg = 10, height_svg = 5) |> 
+  girafe_options(opts_hover(css = "fill:cyan;"))
+```
