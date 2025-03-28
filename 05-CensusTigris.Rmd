@@ -1,0 +1,390 @@
+---
+title: "05-CensusGeographicData"
+output: html_document
+date: "2025-03-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Census Geographic Data and Applications in R
+
+## Tigris
+
+```{r}
+library(tigris)
+options(tigris_use_cache = T)
+```
+
+```{r}
+states <- states()
+```
+
+```{r}
+states
+```
+
+```{r}
+plot(states$geometry)
+```
+
+```{r}
+nm_counties <- counties("NM")
+plot(nm_counties$geometry)
+```
+
+```{r}
+library(sf)
+```
+
+```{r}
+st_crs(nm_counties)
+```
+
+```{r}
+bern_tracts <- tracts("NM", "Bernalillo")
+plot(bern_tracts$geometry)
+```
+
+```{r}
+sf_water <- area_water("NM", "Santa Fe")
+plot(sf_water$geometry)
+```
+
+```{r}
+taos_water <- area_water("NM", "Taos")
+plot(taos_water$geometry)
+```
+
+```{r}
+bern_water <- area_water("NM", "Bernalillo")
+plot(bern_water$geometry)
+```
+
+## Points Landmarks
+
+```{r}
+nm_landmarks <- landmarks("NM", type = "point")
+plot(nm_landmarks$geometry)
+```
+
+```{r}
+View(nm_landmarks)
+```
+
+## Lines
+
+```{r}
+nm_roads <- primary_secondary_roads("NM")
+plot(nm_roads$geometry)
+```
+
+## Polygons
+
+```{r}
+nm_block_groups <- block_groups("NM")
+plot(nm_block_groups$geometry)
+```
+
+-   `nation()`
+-   [`divisions()`](https://rdrr.io/pkg/tigris/man/divisions.html)
+-   [`regions()`](https://rdrr.io/pkg/tigris/man/regions.html)
+-   [`states()`](https://rdrr.io/pkg/tigris/man/states.html)
+-   [`counties()`](https://rdrr.io/pkg/tigris/man/counties.html)
+-   [`tracts()`](https://rdrr.io/pkg/tigris/man/tracts.html)
+-   [`block_groups()`](https://rdrr.io/pkg/tigris/man/block_groups.html)
+-   [`blocks()`](https://rdrr.io/pkg/tigris/man/blocks.html)
+-   [`places()`](https://rdrr.io/pkg/tigris/man/places.html)
+-   [`pumas()`](https://rdrr.io/pkg/tigris/man/pumas.html)
+-   [`school_districts()`](https://rdrr.io/pkg/tigris/man/school_districts.html)
+-   [`zctas()`](https://rdrr.io/pkg/tigris/man/zctas.html)
+-   [`congressional_districts()`](https://rdrr.io/pkg/tigris/man/congressional_districts.html)
+-   [`state_legislative_districts()`](https://rdrr.io/pkg/tigris/man/state_legislative_districts.html)
+-   [`voting_districts()`](https://rdrr.io/pkg/tigris/man/voting_districts.html)
+-   [`area_water()`](https://rdrr.io/pkg/tigris/man/area_water.html)
+-   [`linear_water()`](https://rdrr.io/pkg/tigris/man/linear_water.html)
+-   [`coastline()`](https://rdrr.io/pkg/tigris/man/coastline.html)
+-   [`core_based_statistical_areas()`](https://rdrr.io/pkg/tigris/man/core_based_statistical_areas.html)
+-   [`combined_statistical_areas()`](https://rdrr.io/pkg/tigris/man/combined_statistical_areas.html)
+-   [`metro_divisions()`](https://rdrr.io/pkg/tigris/man/metro_divisions.html)
+-   [`new_england()`](https://rdrr.io/pkg/tigris/man/new_england.html)
+-   [`county_subdivisions()`](https://rdrr.io/pkg/tigris/man/county_subdivisions.html)
+-   [`urban_areas()`](https://rdrr.io/pkg/tigris/man/urban_areas.html)
+-   [`primary_roads()`](https://rdrr.io/pkg/tigris/man/primary_roads.html)
+-   [`primary_secondary_roads()`](https://rdrr.io/pkg/tigris/man/primary_secondary_roads.html)
+-   [`roads()`](https://rdrr.io/pkg/tigris/man/roads.html)
+-   [`rails()`](https://rdrr.io/pkg/tigris/man/rails.html)
+-   [`native_areas()`](https://rdrr.io/pkg/tigris/man/native_areas.html)
+-   [`alaska_native_regional_corporations()`](https://rdrr.io/pkg/tigris/man/alaska_native_regional_corporations.html)
+-   [`tribal_block_groups()`](https://rdrr.io/pkg/tigris/man/tribal_block_groups.html)
+-   [`tribal_census_tracts()`](https://rdrr.io/pkg/tigris/man/tribal_census_tracts.html)
+-   [`tribal_subdivisions_national()`](https://rdrr.io/pkg/tigris/man/tribal_subdivisions_national.html)
+-   [`landmarks()`](https://rdrr.io/pkg/tigris/man/landmarks.html)
+-   [`military()`](https://rdrr.io/pkg/tigris/man/military.html)
+
+```{r}
+library(ggplot2)
+ggplot(bern_tracts) +
+  geom_sf()
+```
+
+```{r}
+ggplot(bern_tracts) +
+  geom_sf() +
+  theme_void()
+```
+
+```{r}
+library(patchwork)
+
+sf_block_groups <- block_groups("NM", "Santa Fe")
+sf_tracts <- tracts("NM", "Santa Fe")
+```
+
+```{r}
+gg1 <- ggplot(sf_tracts) +
+  geom_sf() +
+  theme_void() +
+  labs(title = "Census tracts")
+
+gg2 <- ggplot(sf_block_groups) +
+  geom_sf() +
+  theme_void() +
+  labs(title = "Block groups")
+
+gg1 + gg2
+```
+
+```{r}
+library(mapview)
+mapview(sf_tracts)
+```
+
+## Cartographic boundary shapefiles
+
+Most polygon datasets in **tigris** are available as cartographic boundary
+files, accessible with the argument `cb = TRUE`. These are generalized in
+the interior and clipped to the shoreline. When using the `cb = TRUE`
+argument with counties and larger geographies, users can also specify one of
+three resolutions with the `resolution` argument: `"500k"` (the default),
+`"5m"`, or `"20m"`, with higher values representing more generalized
+boundaries and smaller file sizes.
+
+```{r}
+mi_counties <- counties("MI")
+mi_counties_cb <- counties("MI", cb = TRUE)
+
+mi_tiger_gg <- ggplot(mi_counties) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "TIGER/Line")
+
+mi_cb_gg <- ggplot(mi_counties_cb) + 
+  geom_sf() + 
+  theme_void() + 
+  labs(title = "Cartographic boundary")
+
+mi_tiger_gg + mi_cb_gg
+```
+
+## Cache directory
+
+```{r}
+options(tigris_use_cache = T)
+
+rappdirs::user_cache_dir("tigris")
+```
+
+## Yearly difference in TIGER/Line files
+
+```{r}
+library(glue)
+
+yearly_plots <- map(seq(1990, 2020, 10), ~{
+  year_tracts <- tracts("TX", "Tarrant", year = .x, 
+                        cb = T)
+  
+  ggplot(year_tracts) +
+    geom_sf() +
+    theme_void() +
+    labs(title = glue("{.x}: {nrow(year_tracts)} tracts"))
+})
+```
+
+```{r}
+(yearly_plots[[1]] + yearly_plots[[2]]) /
+  (yearly_plots[[3]] + yearly_plots[[4]])
+```
+
+```{r}
+yearly_plots <- map(seq(1990, 2020, 10), ~{
+  year_tracts <- tracts("NM", "Bernalillo", year = .x, 
+                        cb = T)
+  
+  ggplot(year_tracts) +
+    geom_sf() +
+    theme_void() +
+    labs(title = glue("{.x}: {nrow(year_tracts)} tracts"))
+})
+(yearly_plots[[1]] + yearly_plots[[2]]) /
+  (yearly_plots[[3]] + yearly_plots[[4]])
+```
+
+## Combining tigris datasets
+
+For years starting 2019, `cb = TRUE` obtains all blockgroups.
+
+```{r}
+us_bgs_2020 <- block_groups(cb = T, year = 2020)
+nrow(us_bgs_2020)
+```
+
+> for years prior to 2019
+
+```{r}
+state_codes <- c(state.abb, "DC", "PR")
+
+us_bgs_2018 <- map_dfr(
+  state_codes, 
+  ~block_groups(
+    state = .x, 
+    cb = T, 
+    year = 2018
+  )
+)
+
+nrow(us_bgs_2018)
+```
+
+## CRS
+
+```{r}
+library(sf)
+
+st_crs(nm_counties)
+```
+
+## crsuggest
+
+```{r}
+library(crsuggest)
+
+nm_crs <- suggest_crs(nm_counties)
+nm_crs
+```
+
+```{r}
+nm_projected <- st_transform(nm_counties, crs = 32113)
+head(nm_projected)
+```
+
+## `coord_sf()`
+
+```{r}
+library(ggplot2)
+library(patchwork)
+options(scipen = 999)
+
+p1 <- ggplot(nm_counties) +
+  geom_sf() +
+  coord_sf(crs = 32113)
+p2 <- ggplot(nm_counties) +
+  geom_sf() +
+  coord_sf(crs = 32113, datum = 32113)
+
+p1 + p2
+```
+
+## Shifting and rescaling for national US mapping
+
+```{r}
+us_states <- states(cb = T, resolution = "20m")
+
+ggplot(us_states) +
+  geom_sf() +
+  theme_void()
+```
+
+```{r}
+ggplot(us_states) +
+  geom_sf() +
+  coord_sf(crs = "ESRI:102003") +
+  theme_void()
+```
+
+> with default `preserve_area = TRUE` and `position = "below"`
+
+```{r}
+us_states_shifted <- shift_geometry(us_states)
+
+ggplot(us_states_shifted) +
+  geom_sf() +
+  theme_void()
+```
+
+```{r}
+us_states_outside <- shift_geometry(us_states, 
+                                    preserve_area = T, 
+                                    position = "outside")
+
+ggplot(us_states_outside) +
+  geom_sf() +
+  theme_void()
+```
+
+## Polygons to points
+
+```{r}
+library(tidyverse)
+nm_places <- places("NM", cb = T)|> 
+  filter(NAME %in% c("Albuquerque", "Rio Rancho", "Farmington", 
+                     "Gallup", "Santa Fe", "Las Cruces", 
+                     "Roswell", "Santa Rosa", "Raton")) |> 
+  st_transform(crs = 32113)
+
+nm_outline <- states(cb = T) |> 
+  filter(NAME == "New Mexico") |> 
+  st_transform(crs = 32113)
+
+ggplot() +
+  geom_sf(data = nm_outline) +
+  geom_sf(data = nm_places, fill = "red", color = NA) +
+  theme_void()
+```
+
+```{r}
+nm_centroids <- st_centroid(nm_places)
+
+ggplot() +
+  geom_sf(data = nm_outline) +
+  geom_sf(data = nm_centroids, color = "red", xize = 3) +
+  theme_void()
+```
+
+## Exploding Multipolygons
+
+```{r}
+fl_counties <- counties("FL", cb = TRUE)
+fl_projected <- st_transform(fl_counties, crs = 3087)
+lee <- fl_projected |> 
+  filter(NAME == "Lee")
+```
+
+```{r}
+mapview(lee)
+```
+
+```{r}
+lee
+```
+
+```{r}
+lee_seperate <- st_cast(lee, "POLYGON")
+lee_seperate
+```
+
+```{r}
+lee_seperate[2,] |> 
+  mapview()
+```
