@@ -1,0 +1,76 @@
+---
+title: "07.1-SpatialOverlay"
+output: html_document
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Spatial overlay
+
+R can perform calculations in geographic reference systems with `s2`, but it
+is slower, so suggestion is to change crs.
+
+## Identify geometries in a metro area
+
+> Metropolitan areas are core-based statistical areas with a population
+> $> 50,000$.
+
+```{r}
+library(tigris)
+library(tidyverse)
+library(sf)
+library(tidycensus)
+options(tigris_use_cache = T)
+```
+
+```{r}
+nm_tracts <- map_dfr(c("NM"), ~{
+  tracts(.x, cb = T, year = 2020)
+}) |> 
+  st_transform(32113)
+```
+
+```{r}
+abq_metro <- core_based_statistical_areas(
+  cb = T, year = 2020
+) |> 
+  filter(str_detect(NAME, "Albuquerque")) |> 
+  st_transform(32113)
+```
+
+```{r}
+abq_metro_plot <- ggplot() +
+  geom_sf(data = nm_tracts, fill = "white", color = "grey") +
+  geom_sf(data = abq_metro, fill = NA, color = "red") +
+  theme_void()
+abq_metro_plot
+```
+
+## Spatial subsets
+
+```{r}
+abq_tracts <- nm_tracts[abq_metro, ]
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data = abq_tracts, fill = "white", color = "grey") + 
+  geom_sf(data = abq_metro, fill = NA, color = "red") + 
+  theme_void()
+```
+
+```{r}
+abq_tract_within <- nm_tracts |> 
+  st_filter(abq_metro, .predicate = st_within)
+
+# Equivalent syntax: 
+# kc_metro2 <- kc_tracts[kc_metro, op = st_within]
+
+ggplot() +
+  geom_sf(data = abq_tract_within, fill = "white", color = "grey") +
+  geom_sf(data = abq_metro, fill = NA, color = "red") +
+  theme_void()
+```
