@@ -1,0 +1,104 @@
+---
+title: "7.2 Small area time series"
+output: html_document
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Small area time-series
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+options(tigris_use_cache = T)
+```
+
+> Number of people working from home
+
+```{r}
+wfh_15 <- get_acs(
+  geography = "tract", 
+  variables = "B08006_017",
+  year = 2015,
+  state = "NM", 
+  county = "Bernalillo", 
+  geometry = T
+) |> 
+  select(estimate) |> 
+  st_transform(32113)
+
+wfh_20 <- get_acs(
+  geography = "tract", 
+  variables = "B08006_017",
+  year = 2020,
+  state = "NM", 
+  county = "Bernalillo", 
+  geometry = T
+) |> 
+  st_transform(32113)
+```
+
+## Area-weighted areal interpolation
+
+```{r}
+wfh_interpolate_aw <- st_interpolate_aw(
+  wfh_15,
+  wfh_20,
+  extensive = T
+) |> 
+  mutate(GEOID = wfh_20$GEOID)
+```
+
+## Population-weighted areal interpolation
+
+```{r}
+bernalillo_blocks <- blocks(
+  state = "NM",
+  county = "Bernalillo",
+  year = 2020
+)
+
+wfh_interpolate_pw <- interpolate_pw(
+  wfh_15,
+  wfh_20,
+  to_id = "GEOID",
+  extensive = T,
+  weights = bernalillo_blocks,
+  weight_column = "POP20",
+  crs = 32113
+)
+nrow(wfh_interpolate_pw)
+```
+
+## Making comparisons
+
+```{r}
+library(mapboxapi)
+
+wfh_shift <- wfh_20 |> 
+  left_join(st_drop_geometry(wfh_interpolate_pw),
+            by = "GEOID",
+            suffix = c("_2020","_2015")) |> 
+  mutate(wfh_shift = estimate_2020 - estimate_2015)
+
+bernalillo_basemap <- layer_static_mapbox(
+  location = wfh_shift,
+  style_id = "dark-v9",
+  username = "mapbox"
+)
+
+ggplot() +
+  bernalillo_basemap +
+  geom_sf(data = wfh_shift, aes(fill = wfh_shift),
+          color = NA, alpha = 0.7) +
+  scale_fill_distiller(palette = "PuOr", direction = -1) +
+  labs(fill = "Shift, 2011-2015 to\n2016-2020 ACS",
+       title = "Change in work-from-home population",
+       subtitle = "Bernalillo County, New Mexico") +
+  theme_void()
+```

@@ -1,5 +1,5 @@
 ---
-title: "07.1-SpatialOverlay"
+title: "07.1-Spatial Joins"
 output: html_document
 date: "2025-03-28"
 ---
