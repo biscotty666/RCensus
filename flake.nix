@@ -34,6 +34,8 @@
             rPackages.spdep
             rPackages.ggiraph
             rPackages.maps
+            rPackages.tidygeocoder
+            rPackages.trajr
             rPackages.devtools
             rPackages.flowmapblue
             rPackages.tidycensus
