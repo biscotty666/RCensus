@@ -1,11 +1,13 @@
 ---
 title: "05-CensusGeographicData"
-output: html_document
+output: 
+  html_document:
+    toc: true
 date: "2025-03-26"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
 ```
 
 # Census Geographic Data and Applications in R
@@ -70,7 +72,7 @@ plot(nm_landmarks$geometry)
 ```
 
 ```{r}
-View(nm_landmarks)
+#View(nm_landmarks)
 ```
 
 ## Lines
@@ -200,7 +202,7 @@ rappdirs::user_cache_dir("tigris")
 
 ```{r}
 library(glue)
-
+library(purrr)
 yearly_plots <- map(seq(1990, 2020, 10), ~{
   year_tracts <- tracts("TX", "Tarrant", year = .x, 
                         cb = T)
