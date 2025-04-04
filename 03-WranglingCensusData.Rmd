@@ -1,16 +1,18 @@
 ---
 title: "03-WranglingCensusData"
-output: html_document
+output: 
+  html_document:
+    toc: true
 date: "2025-03-25"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
 ```
 
 # Wrangling Census Data
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 library(tidycensus)
 library(tidyverse)
 ```
@@ -276,18 +278,35 @@ example_tract <- nola |>
 
 example_tract |> select(-NAME)
 ```
-A potential solution to large margins of error for small estimates in the ACS is to aggregate data upwards until a satisfactory margin of error to estimate ratio is reached. The US Census Bureau publishes formulas for appropriately calculating margins of error around such derived estimates, which are included in tidycensus with the following functions:
 
-    moe_sum(): calculates a margin of error for a derived sum;
-    moe_product(): calculates a margin of error for a derived product;
-    moe_ratio(): calculates a margin of error for a derived ratio;
-    moe_prop(): calculates a margin of error for a derived proportion.
+A potential solution to large margins of error for small estimates in the
+ACS is to aggregate data upwards until a satisfactory margin of error to
+estimate ratio is reached. The US Census Bureau publishes formulas for
+appropriately calculating margins of error around such derived estimates,
+which are included in tidycensus with the following functions:
 
-In their most basic form, these functions can be used with constants. For example, let’s say we had an ACS estimate of 25 with a margin of error of 5 around that estimate. The appropriate denominator for this estimate is 100 with a margin of error of 3. To determine the margin of error around the derived proportion of 0.25, we can use moe_prop():
+```         
+moe_sum(): calculates a margin of error for a derived sum;
+moe_product(): calculates a margin of error for a derived product;
+moe_ratio(): calculates a margin of error for a derived ratio;
+moe_prop(): calculates a margin of error for a derived proportion.
+```
+
+In their most basic form, these functions can be used with constants. For
+example, let’s say we had an ACS estimate of 25 with a margin of error of 5
+around that estimate. The appropriate denominator for this estimate is 100
+with a margin of error of 3. To determine the margin of error around the
+derived proportion of 0.25, we can use moe_prop():
+
 ```{r}
 moe_prop(25, 100, 5, 3)
 ```
-Given that the smaller age bands in the Salt Lake City dataset are characterized by too much uncertainty for our analysis, we decide in this scenario to aggregate our data upwards to represent populations aged 65 and older by sex.
+
+Given that the smaller age bands in the Salt Lake City dataset are
+characterized by too much uncertainty for our analysis, we decide in this
+scenario to aggregate our data upwards to represent populations aged 65 and
+older by sex.
+
 ```{r}
 nola_grouped <- nola |> 
   mutate(sex = case_when(
@@ -299,4 +318,3 @@ nola_grouped <- nola |>
             sum_moe = moe_sum(moe, estimate))
 nola_grouped
 ```
-

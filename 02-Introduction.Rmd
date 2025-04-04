@@ -9,7 +9,7 @@ date: "2025-03-25"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, paged.print=FALSE)
 ```
 
 # Tidycensus Basics
