@@ -1,11 +1,13 @@
 ---
 title: "04-CensusVisualization"
-output: html_document
+output: 
+  html_document:
+    toc: true
 date: "2025-03-26"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
 ```
 
 # Visualization
@@ -28,7 +30,7 @@ nm_wide <- get_acs(
 nm_wide
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 options(scipen = 999) # avoid scientific notation
 
@@ -105,7 +107,7 @@ metro_plot <- metro_plot +
 metro_plot
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(scales)
 ```
 
@@ -205,7 +207,7 @@ nm_income |>
 
 ## Visualizing estimates over time
 
-```{r}
+```{r message=FALSE}
 years <- 2005:2019
 names(years) <- years
 
@@ -229,7 +231,7 @@ bernalillo_value |>
   geom_point()
 ```
 
-```{r}
+```{r message=FALSE}
 santa_fe_value <- map_dfr(years, ~{
   get_acs(
     geography = "county", 
@@ -381,12 +383,13 @@ housing_val2 |>
   geom_density(alpha = 0.3)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
+library(scales)
 housing_val2 |> 
   ggplot(aes(x = estimate)) +
   geom_density(fill = "orange", color = "red", alpha = 0.5) +
   facet_wrap(~county) +
-  scale_x_continuous(label = dollar_format(scale = .001,
+  scale_x_continuous(labels = dollar_format(scale = .001,
                                            suffix = "k")) +
   theme_minimal(base_size = 14) +
   theme(axis.text.y = element_blank(), 
@@ -402,7 +405,7 @@ housing_val2 |>
 library(ggridges)
 ```
 
-```{r}
+```{r warning=FALSE}
 housing_val2 |> 
   ggplot(aes(x = estimate, y = county)) +
   geom_density_ridges() +
@@ -458,27 +461,6 @@ abq_race_income |>
 ```
 
 ```{r}
-library(geofacet)
-ggplot(nm_filtered, aes(x = prop, y = AGEGROUP, fill = SEX)) + 
-  geom_col(width = 1) + 
-  theme_minimal() + 
-  scale_fill_manual(values = c("darkred", "navy")) + 
-  facet_geo(~ NAME, grid = "us_nm_counties_grid1",
-            label = "code") + 
-  theme(axis.text = element_blank(),
-        strip.text.x = element_text(size = 8)) + 
-  labs(x = "", 
-       y = "", 
-       title = "Population structure by age and sex", 
-       fill = "", 
-       caption = "Data source: US Census Bureau population estimates & tidycensus R package")
-```
-
-```{r}
-
-```
-
-```{r}
 nm_pyramid_data <-  get_estimates(
   geography = "county",
   state = "NM",
@@ -512,7 +494,7 @@ nm_pyramid_data
 ```
 
 ```{r}
-
+library(geofacet)
 ggplot(nm_pyramid_data, aes(x = prop, y = AGEGROUP, fill = SEX)) + 
   geom_col(width = 1) + 
   theme_minimal() + 
@@ -526,11 +508,4 @@ ggplot(nm_pyramid_data, aes(x = prop, y = AGEGROUP, fill = SEX)) +
        title = "Population structure by age and sex", 
        fill = "", 
        caption = "Data source: US Census Bureau population estimates & tidycensus R package")
-```
-
-## Plotly
-
-```{r}
-library(plotly)
-ggplotly(nm_pyramid)
 ```
