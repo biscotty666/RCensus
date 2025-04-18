@@ -1,0 +1,248 @@
+---
+title: "07.5-Spatial Neighborhoods and weights"
+output: 
+  md_document:
+    variant: gfm
+always_allow_html: true
+date: "2025-04-18"
+---
+
+# Spatial Neighborhoods and weights matrices
+
+ESDA with spatial properties. Example, median age by census tract.
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(spdep)
+options(tigris_use_cache = T)
+```
+
+```{r}
+abq <- core_based_statistical_areas(
+  cb = T,
+  year = 2020) |> filter(str_detect(NAME, "Albuquerque")) |> 
+  st_transform(32113)
+  
+abq_tracts <- get_acs(
+  geography = "tract",
+  variables = "B01002_001",
+  state = "NM",
+  year = 2020,
+  geometry = T
+) |> 
+  st_transform(32113) |> 
+  st_filter(abq, .predicate = st_within) |> 
+  na.omit()
+
+ggplot(abq_tracts) +
+  geom_sf(aes(fill = estimate), color = NA) +
+  scale_fill_viridis_c() +
+  theme_void()
+```
+
+## Spatial neighborhood definitions
+
+`spdep` includes:
+
+-   *Proximity-based neighbors*, where neighboring features are
+    identified based on some measure of distance. Neighbors might be defined
+    as those that fall within a given distance threshold (e.g. all features
+    within 2km of a given feature) or as *k*-nearest neighbors (e.g. the
+    nearest eight features to a given feature).
+-   *Graph-based neighbors*, where neighbors are defined through network
+    relationships (e.g. along a street network).
+-   *Contiguity-based neighbors*, used when geographic features are
+    polygons. Options for contiguity-based spatial relationships include
+    *queen’s case neighbors*, where all polygons that share at least one
+    vertex are considered neighbors; and *rook’s case neighbors*, where
+    polygons must share at least one line segment to be considered
+    neighbors.
+
+## Queen contiguity
+
+```{r}
+neighbors <- poly2nb(abq_tracts, queen = T)
+
+summary(neighbors)
+```
+
+```{r}
+abq_coords <- abq_tracts |> 
+  st_centroid() |> 
+  st_coordinates()
+
+```
+
+```{r}
+plot(abq_tracts$geometry)
+plot(neighbors, 
+     coords = abq_coords,
+     add = T,
+     col = "blue", points = F)
+```
+
+```{r}
+neighbors[[1]]
+```
+
+## Generate spatial weights matrix
+
+> Convert neighbors list to spatial weights
+>
+> Can use row-standardized `style = "W", when analyzing means` or 1/0 with
+> `style = "B" when computing sums`.
+
+```{r}
+weights <- nb2listw(neighbors, style = "W")
+weights$weights[[1]]
+```
+
+## Global and local spatial autocorrelation
+
+The degree to which a variable is similar to or different from their
+neighbors.
+
+-   *Spatial clustering*: data values tend to be similar to neighboring data
+    values;
+-   *Spatial uniformity*: data values tend to differ from neighboring data
+    values;
+-   *Spatial randomness*: there is no apparent relationship between data
+    values and those of their neighbors.
+
+### Spatial lags and Moran's $I$
+
+```{r}
+abq_tracts$lag_estimate <- lag.listw(weights, abq_tracts$estimate)
+```
+
+```{r}
+ggplot(abq_tracts, aes(x = estimate, y = lag_estimate)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(color = "red") +
+  theme_minimal() +
+  labs(title = "Median age by Census tract, Albuquerque Metro",
+       x = "Median age",
+       y = "Spatial lag, median age", 
+       caption = "Data source: 2016-2020 ACS via the tidycensus R package.\nSpatial relationships based on queens-case polygon contiguity.")
+```
+
+> positive correlation suggested, quantify with Moran's $I$
+
+```{r}
+moran.test(abq_tracts$estimate, weights)
+```
+
+> Positive statistic shows age populations are spatially clustered, not
+> spatially uniform.
+
+## Local spatial autocorrelation
+
+> Getis-Ord local G
+
+```{r}
+localg_weights <- nb2listw(include.self(neighbors))
+
+abq_tracts$localG <- localG(abq_tracts$estimate, localg_weights)
+
+ggplot(abq_tracts) + 
+  geom_sf(aes(fill = as.numeric(localG)), color = NA) + 
+  scale_fill_distiller(palette = "RdYlBu") + 
+  theme_void() + 
+  labs(fill = "Local Gi* statistic")
+```
+
+> Hotspots
+
+```{r}
+abq_tracts <- abq_tracts |> 
+  mutate(hotspot = case_when(
+    localG >= 2.576 ~ "High cluster",
+    localG <= -2.576 ~ "Low cluster",
+    TRUE ~ "Not significant"
+  ))
+
+ggplot(abq_tracts) +
+  geom_sf(aes(fill = hotspot), color = "grey90", size = 0.1) +
+  scale_fill_manual(values = c("red", "blue", "grey")) +
+  theme_void()
+```
+
+```{r}
+class(abq_tracts$localG)
+```
+
+```{r}
+abq_tracts[2:10,]$localG
+```
+
+## Local indicators of spatial association (LISA)
+
+One of the major benefits of using LISA for exploratory analysis is its
+ability to identify both *spatial clusters*, where observations are
+surrounded by similar values, and *spatial outliers*, where observations are
+surrounded by dissimilar values.
+
+```{r}
+set.seed(1916)
+
+abq_tracts$scaled_estimate <- as.numeric(scale(abq_tracts$estimate))
+
+abq_lisa <- localmoran_perm(
+  abq_tracts$scaled_estimate,
+  weights,
+  nsim = 999L,
+  alternative = "two.sided"
+) |> 
+  as_tibble() |> 
+  set_names(c("local_i", "exp_i", "var_i", "z_i", "p_i",
+              "p_i_sim", "pi_sim_folded", "skewness", "kurtosis"))
+
+abq_lisa_df <- abq_tracts |> 
+  select(GEOID, scaled_estimate) |> 
+  mutate(lagged_estimate = lag.listw(weights, scaled_estimate)) |> 
+  bind_cols(abq_lisa)
+
+abq_lisa_df
+```
+
+```{r}
+abq_lisa_clusters <- abq_lisa_df %>%
+  mutate(lisa_cluster = case_when(
+    p_i >= 0.05 ~ "Not significant",
+    scaled_estimate > 0 & local_i > 0 ~ "High-high",
+    scaled_estimate > 0 & local_i < 0 ~ "High-low",
+    scaled_estimate < 0 & local_i > 0 ~ "Low-low",
+    scaled_estimate < 0 & local_i < 0 ~ "Low-high"
+  ))
+```
+
+```{r}
+color_values <- c(`High-high` = "red", 
+                  `High-low` = "pink", 
+                  `Low-low` = "blue", 
+                  `Low-high` = "lightblue", 
+                  `Not significant` = "white")
+
+ggplot(abq_lisa_clusters, aes(x = scaled_estimate,
+                              y = lagged_estimate,
+                              fill = lisa_cluster)) +
+  geom_point(color = "black", shape = 21, size = 2) +
+  theme_minimal() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = color_values) +
+  labs(x = "Median age (z-score)",
+       y = "Spatial lag of median age (z-score)",
+       fill = "Cluster type")
+```
+
+```{r}
+ggplot(abq_lisa_clusters, aes(fill = lisa_cluster)) +
+  geom_sf(size = 0.1) +
+  theme_void() +
+  scale_fill_manual(values = color_values) +
+  labs(fill = "Cluster type")
+```
