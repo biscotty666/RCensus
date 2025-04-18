@@ -1,6 +1,8 @@
 ---
 title: "05-CensusGeographicData"
 output: 
+  md_document:
+    variant: gfm
   html_document:
     toc: true
 date: "2025-03-26"
@@ -159,6 +161,8 @@ gg1 + gg2
 ```
 
 ```{r}
+#| eval: false
+
 library(mapview)
 mapview(sf_tracts)
 ```
@@ -374,6 +378,8 @@ lee <- fl_projected |>
 ```
 
 ```{r}
+#| eval: false
+
 mapview(lee)
 ```
 
@@ -387,6 +393,8 @@ lee_seperate
 ```
 
 ```{r}
+#| eval: false
+
 lee_seperate[2,] |> 
   mapview()
 ```

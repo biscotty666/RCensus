@@ -1,6 +1,8 @@
 ---
 title: "06.2-CartographicWorkflows"
 output: 
+  md_document:
+    variant: gfm
   html_document:
     toc: true
 date: "2025-03-28"
@@ -114,7 +116,7 @@ abq_zctas <- zctas(
   year = 2018
 )
 
-mapview(abq_zctas)
+#mapview(abq_zctas)
 ```
 
 ```{r}
@@ -173,11 +175,14 @@ bern_bachelors <- get_acs(
 ```
 
 ```{r}
+#| eval: false
 library(mapview)
 mapview(bern_bachelors, zcol = "estimate")
 ```
 
 ```{r}
+#| eval: false
+
 ttm()
 tm_shape(bern_bachelors) +
   tm_fill(col = "estimate", palette = "magma",
@@ -199,6 +204,8 @@ pal(c(10, 20, 30, 40, 50))
 ```
 
 ```{r}
+#| eval: false
+
 leaflet() |> 
   addProviderTiles(providers$Stadia.StamenTonerLite) |> 
   addPolygons(data = bern_bachelors, 
@@ -245,6 +252,8 @@ gg
 ```
 
 ```{r}
+#| eval: false
+
 girafe(ggobj = gg) |> 
   girafe_options(opts_hover(css = "fill:cyan"),
                  opts_zoom(max = 10))
@@ -266,6 +275,8 @@ abq_inflows
 ```
 
 ```{r}
+#| eval: false
+
 library(mapdeck)
 
 key <- "pk.eyJ1IjoiYmlzY290dHkiLCJhIjoiY2x0azc2eGo5MHhkYTJqb3lndG44bjN3OSJ9.KVJqBYZMqDW_E9JisfCiLg"
@@ -335,6 +346,8 @@ nm_map + nm_plot
 ```
 
 ```{r}
+#| eval: false
+
 girafe(ggobj = nm_map + nm_plot,
        width_svg = 10, height_svg = 5) |> 
   girafe_options(opts_hover(css = "fill:cyan;"))

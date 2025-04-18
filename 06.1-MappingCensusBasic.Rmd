@@ -1,6 +1,10 @@
 ---
 title: "06.1-MappingCensusBasic"
-output: html_document
+output: 
+  md_document:
+    variant: gfm
+  html_document:
+    toc: true
 date: "2025-03-27"
 ---
 

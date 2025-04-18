@@ -1,6 +1,8 @@
 ---
 title: "03-WranglingCensusData"
 output: 
+  md_document:
+    variant: gfm
   html_document:
     toc: true
 date: "2025-03-25"

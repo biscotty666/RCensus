@@ -1,11 +1,15 @@
 ---
 title: "7.2 Small area time series"
-output: html_document
+output: 
+  md_document:
+    variant: gfm
+  html_document:
+    toc: true
 date: "2025-03-28"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
 ```
 
 # Small area time-series

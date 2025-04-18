@@ -1,0 +1,152 @@
+---
+title: "7.4 Distance and proximity analysis"
+output: 
+  md_document:
+    variant: gfm
+  html_document:
+    toc: true
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Distance and proximity analysis
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+options(tigris_use_cache = T)
+```
+
+```{r}
+nm_tracts <- tracts("NM", cb = TRUE, year = 2019) %>%
+  st_transform(32113)
+```
+
+```{r}
+library(osmdata)
+available_tags("amenity")
+nm_bb <- getbb("New Mexico")
+```
+
+```{r}
+nm_hospitals <- nm_bb |> 
+  opq() |> 
+  add_osm_feature(key = "amenity", value = "hospital") |> 
+  osmdata_sf()
+
+nm_hospitals <- nm_hospitals$osm_polygons |> 
+  st_transform(32113)
+
+trauma <- nm_hospitals |> 
+  filter(str_detect(emergency, "yes")) |> 
+  st_cast(to = 'POINT')
+```
+
+## Distances
+
+```{r}
+nm_trauma <-  trauma |> 
+  st_filter(nm_tracts,
+            .predicate = st_is_within_distance,
+            dist = 100000)
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = nm_tracts, color = "NA", fill = "grey50") +
+  geom_sf(data = nm_trauma, color = "red") +
+  theme_void()
+```
+
+```{r}
+dist <- nm_tracts |> 
+  st_centroid() |> 
+  st_distance(nm_trauma)
+
+dist[1:5, 1:5]
+```
+
+A glimpse at the matrix shows distances (in meters) between the first five
+Census tracts in the dataset and the first five hospitals. When considering
+*accessibility*, we may be interested in the distance to the *nearest*
+hospital to each Census tract.
+
+```{r}
+min_dist <- dist |> 
+  apply(1, min) |> 
+  as.vector() |> 
+  magrittr::divide_by(1000)
+
+hist(min_dist)
+```
+
+```{r}
+class(nm_trauma)
+plot(nm_trauma['osm_id'])
+```
+
+## Demographic Estimates (poverty)
+
+```{r}
+bernalillo_poverty <- get_acs(
+  geography = "block group",
+  variables = c(poverty_denom = "B17010_001",
+                poverty_num = "B17010_002"),
+  state = "NM",
+  county = "Bernalillo",
+  geometry = T,
+  output = "wide",
+  year = 2020
+) |> 
+  select(poverty_denomE, poverty_numE) |> 
+  st_transform(32113)
+
+nrow(bernalillo_poverty)
+```
+
+```{r}
+bernalillo_blocks <- blocks(
+  state = "NM", 
+  county = "Bernalillo", 
+  year = 2020
+)
+buf5km <- st_buffer(st_centroid(bernalillo_blocks), dist = 5000) 
+```
+
+```{r}
+library(glue)
+
+buffer_pov <- interpolate_pw(
+  from = bernalillo_poverty,
+  to = "buf5km",
+  extensive = T,
+  weights = bernalillo_blocks,
+  weight_column = "POP20",
+  crs = 32113
+) |> 
+  mutate(pct_poverty = 100 * poverty_numE / poverty_denomE)
+```
+
+```{r}
+class(bernalillo_blocks)
+```
+
+```{r}
+polk_poverty <- get_acs(
+  geography = "block group",
+  variables = c(poverty_denom = "B17010_001",
+                poverty_num = "B17010_002"),
+  state = "IA",
+  county = "Polk",
+  geometry = TRUE,
+  output = "wide",
+  year = 2020
+) %>%
+  select(poverty_denomE, poverty_numE) %>%
+  st_transform(26975)
+```
