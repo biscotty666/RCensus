@@ -1,0 +1,68 @@
+---
+title: "07.5-SpatialOverlay"
+output: 
+  md_document:
+    variant: gfm
+always_allow_html: true
+date: "2025-04-18"
+---
+
+# Better cartography with spatial overlay
+
+Sometimes the cartographic shape files created using `geometry = T` may not
+be sufficient. This example is of NYC, which includes water areas in what
+tidycensus returns. In this case, we can use the core TIGER/Line shapefiles
+instead.
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+options(tigris_use_cache = T)
+```
+
+```{r}
+ny <- get_acs(
+  geography = "tract",
+  variables = "B19013_001",
+  state = "NY",
+  county = "New York",
+  year = 2020,
+  geometry = T
+)
+
+ggplot(ny) +
+  geom_sf(aes(fill = estimate)) +
+  scale_fill_viridis_c(labels = scales::label_dollar()) +
+  theme_void() +
+  labs(fill = "Median household\nincome")
+```
+
+> get TIGER/Line instead of cartographic boundaries
+
+```{r}
+ny2 <- get_acs(
+  geography = "tract",
+  variables = "B19013_001",
+  state = "NY",
+  county = "New York",
+  year = 2020,
+  geometry = T,
+  cb = F
+) |> st_transform(6538)
+```
+
+> remove water areas with `erase_water`
+
+```{r}
+ny_erase <- erase_water(ny2)
+```
+
+```{r}
+ggplot(ny_erase) +
+  geom_sf(aes(fill = estimate)) +
+  scale_fill_viridis_c(labels = scales::label_dollar()) +
+  theme_void() +
+  labs(fill = "Median household\nincome")
+```
