@@ -1,0 +1,85 @@
+---
+title: "7.4 Distance and proximity analysis"
+output: 
+  md_document:
+    variant: gfm
+  html_document:
+    toc: true
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Distance and proximity analysis
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(sf)
+options(tigris_use_cache = T)
+```
+
+
+## Demographic Estimates (poverty)
+
+```{r}
+bernalillo_poverty <- get_acs(
+  geography = "block group",
+  variables = c(poverty_denom = "B17010_001",
+                poverty_num = "B17010_002"),
+  state = "NM",
+  county = "Bernalillo",
+  geometry = T,
+  output = "wide",
+  year = 2020
+) |> 
+  select(poverty_denomE, poverty_numE) |> 
+  st_transform(32113)
+
+nrow(bernalillo_poverty)
+```
+
+```{r}
+bernalillo_blocks <- blocks(
+  state = "NM", 
+  county = "Bernalillo", 
+  year = 2020
+)
+buf5km <- st_buffer(st_centroid(bernalillo_blocks), dist = 5000) 
+```
+
+```{r}
+library(glue)
+
+buffer_pov <- interpolate_pw(
+  from = bernalillo_poverty,
+  to = "buf5km",
+  extensive = T,
+  weights = bernalillo_blocks,
+  weight_column = "POP20",
+  crs = 32113
+) |> 
+  mutate(pct_poverty = 100 * poverty_numE / poverty_denomE)
+```
+
+```{r}
+class(bernalillo_blocks)
+```
+
+```{r}
+polk_poverty <- get_acs(
+  geography = "block group",
+  variables = c(poverty_denom = "B17010_001",
+                poverty_num = "B17010_002"),
+  state = "IA",
+  county = "Polk",
+  geometry = TRUE,
+  output = "wide",
+  year = 2020
+) %>%
+  select(poverty_denomE, poverty_numE) %>%
+  st_transform(26975)
+```

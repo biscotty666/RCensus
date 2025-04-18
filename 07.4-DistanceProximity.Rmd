@@ -3,8 +3,7 @@ title: "7.4 Distance and proximity analysis"
 output: 
   md_document:
     variant: gfm
-  html_document:
-    toc: true
+always_allow_html: true
 date: "2025-03-28"
 ---
 
@@ -71,8 +70,8 @@ dist <- nm_tracts |>
 dist[1:5, 1:5]
 ```
 
-A glimpse at the matrix shows distances (in meters) between the first five
-Census tracts in the dataset and the first five hospitals. When considering
+The dense matrix shows distances (in meters) between the first five Census
+tracts in the dataset and the first five hospitals. When considering
 *accessibility*, we may be interested in the distance to the *nearest*
 hospital to each Census tract.
 
@@ -86,67 +85,143 @@ hist(min_dist)
 ```
 
 ```{r}
-class(nm_trauma)
 plot(nm_trauma['osm_id'])
+ggplot(nm_trauma) +
+  geom_sf()
+  
 ```
 
-## Demographic Estimates (poverty)
+```{r}
+pnt <- nm_trauma$geometry[1,]
+class(pnt)
+st_coordinates(pnt)[,1]
+```
+
+## Travel times
 
 ```{r}
-bernalillo_poverty <- get_acs(
+library(mapboxapi)
+```
+```{r eval=FALSE}
+times <- mb_matrix(nm_tracts, nm_trauma,
+                   allow_large_matrix = TRUE)
+```
+## Catchment areas with buffers and isochrones
+
+```{r}
+ggplot(nm_trauma) +
+  geom_sf(aes(color = osm_id)) +
+  geom_text(label = nm_trauma$osm_id, 
+             x = st_coordinates(nm_trauma$geometry)[,1], 
+             y = st_coordinates(nm_trauma$geometry)[,2])
+```
+```{r}
+guadalupe_county <- nm_trauma[nm_trauma$osm_id == "458183369",][1,]
+
+buf5km <- st_buffer(guadalupe_county, dist = 5000)
+```
+
+```{r}
+iso15min <- mb_isochrone(
+  guadalupe_county,
+  time = 15,
+  profile = "driving-traffic",
+  depart_at = "2025-04-19T10:00"
+)
+```
+```{r}
+iso15min_p <- st_transform(iso15min, 32113)
+buf5km_p <- st_transform(buf5km, 32113)
+```
+
+
+```{r}
+library(leaflet)
+library(leafsync)
+```
+```{r}
+hospital_icon <- makeAwesomeIcon(icon = "ios-medical",
+                                 markerColor = "red",
+                                 library = "ion")
+
+m2 <- leaflet() |> 
+  addProviderTiles(providers$Esri.WorldStreetMap) |> 
+  addPolygons(data = iso15min) |> 
+  addAwesomeMarkers(data = st_transform(guadalupe_county, 4326),
+                    icon = hospital_icon)
+  
+m1 <- leaflet() |> 
+  addProviderTiles(providers$Esri.WorldStreetMap) |> 
+  addPolygons(data = st_transform(buf5km, 4326)) |> 
+  addAwesomeMarkers(data =  st_transform(guadalupe_county, 4326),
+                    icon = hospital_icon)
+
+sync(m1, m2)
+```
+
+
+## Demographic estimates for zones with areal interpolation
+
+
+```{r}
+guadalupe_poverty <- get_acs(
   geography = "block group",
   variables = c(poverty_denom = "B17010_001",
                 poverty_num = "B17010_002"),
   state = "NM",
-  county = "Bernalillo",
+  county = "Guadalupe",
   geometry = T,
   output = "wide",
   year = 2020
 ) |> 
   select(poverty_denomE, poverty_numE) |> 
   st_transform(32113)
-
-nrow(bernalillo_poverty)
 ```
 
-```{r}
-bernalillo_blocks <- blocks(
-  state = "NM", 
-  county = "Bernalillo", 
-  year = 2020
-)
-buf5km <- st_buffer(st_centroid(bernalillo_blocks), dist = 5000) 
-```
+We can then use population-weighted areal interpolation with interpolate_pw() function in tidycensus to estimate family poverty in both the buffer zone and the isochrone. Block weights for Polk County are obtained with tigris, and both the numerator and denominator columns are interpolated.
 
 ```{r}
 library(glue)
 
+guadalupe_blocks <- blocks(
+  state = "NM",
+  county = "Guadalupe",
+  year = 2020
+)
+
+
 buffer_pov <- interpolate_pw(
-  from = bernalillo_poverty,
-  to = "buf5km",
+  from = guadalupe_poverty,
+  to = buf5km,
   extensive = T,
-  weights = bernalillo_blocks,
+  weights = guadalupe_blocks,
   weight_column = "POP20",
   crs = 32113
 ) |> 
-  mutate(pct_poverty = 100 * poverty_numE / poverty_denomE)
+  mutate(pct_poverty = 100 * (poverty_numE / poverty_denomE))
+
+iso_pov <- interpolate_pw(
+  from = guadalupe_poverty,
+  to = iso15min,
+  extensive = T,
+  weights = guadalupe_blocks,
+  weight_column = "POP20",
+  crs = 32113
+) |> 
+  mutate(pct_poverty = 100 * (poverty_numE / poverty_denomE))
+
 ```
 
 ```{r}
-class(bernalillo_blocks)
+data.frame(
+  "Method" = c("5km buffer", "15 min isochrome"),
+  "Families in poverty" = c(buffer_pov[1,]$poverty_numE, 
+                            iso_pov[1,]$poverty_numE),
+  "Total families" = c(buffer_pov[1,]$poverty_denomE, 
+                       iso_pov[1,]$poverty_denomE),
+  "Percent" = c(buffer_pov[1,]$pct_poverty, 
+                iso_pov[1,]$pct_poverty)
+)
 ```
 
-```{r}
-polk_poverty <- get_acs(
-  geography = "block group",
-  variables = c(poverty_denom = "B17010_001",
-                poverty_num = "B17010_002"),
-  state = "IA",
-  county = "Polk",
-  geometry = TRUE,
-  output = "wide",
-  year = 2020
-) %>%
-  select(poverty_denomE, poverty_numE) %>%
-  st_transform(26975)
-```
+

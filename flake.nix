@@ -34,6 +34,11 @@
             rPackages.spdep
             rPackages.ggiraph
             rPackages.maps
+            rPackages.segregation
+            rPackages.corrr
+            rPackages.car
+            rPackages.spatialreg
+            rPackages.GWmodel
             rPackages.tidygeocoder
             rPackages.trajr
             rPackages.devtools
