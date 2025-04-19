@@ -1,0 +1,239 @@
+---
+title: "08.2-Regression Modelling Census Data"
+output: 
+  md_document:
+    variant: gfm
+date: "2025-03-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# 08.2-Regression Modeling Census Data
+
+Demographic statistics are typically highly correlated, and spatial
+information tends to be autocorrelated spatially, so many predictors are not
+independent.
+
+This exercise looks at median home values.
+
+## Data setup and esda
+
+```{r}
+library(tidycensus)
+library(sf)
+library(tidyverse)
+
+nm_counties <- c("Valencia", "Bernalillo","Sandoval", 
+                 "Santa Fe", "Los Alamos")
+
+variables_to_get <- c(
+  median_value = "B25077_001",
+  median_rooms = "B25018_001",
+  median_income = "DP03_0062",
+  total_population = "B01003_001",
+  median_age = "B01002_001",
+  pct_college = "DP02_0068P",
+  pct_foreign_born = "DP02_0094P",
+  pct_white = "DP05_0077P",
+  median_year_built = "B25037_001",
+  percent_ooh = "DP04_0046P"
+)
+
+abq_data <- get_acs(
+  geography = "tract", 
+  variables = variables_to_get,
+  state = "NM",
+  geometry = T,
+  county = nm_counties,
+  output = "wide",
+  year = 2020
+) |> 
+  select(-NAME) |> 
+  st_transform(32113)
+
+head(abq_data)
+```
+
+## Visualization
+
+```{r}
+library(tidyverse)
+library(patchwork)
+
+mhv_map <- ggplot(abq_data, aes(fill = median_valueE)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(labels = scales::label_dollar()) +
+  theme_void() +
+  labs(fill = "Median home value")
+
+mhv_histogram <- ggplot(abq_data, aes(x = median_valueE)) +
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 40) +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
+  labs(x = "Median home value")
+
+mhv_map + mhv_histogram
+```
+
+> to make the right-skewed distribution more normal, apply log
+> transformation
+
+```{r}
+mhv_map_log <- ggplot(abq_data, aes(fill = log(median_valueE))) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c() +
+  theme_void() +
+  labs(fill = "Median home\nvalue (log)")
+
+mhv_histogram_log <- ggplot(abq_data, aes(x = log(median_valueE))) +
+  geom_histogram(alpha = 0.5, fill = "navy", color = "navy",
+                 bins = 40) +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
+  labs(x = "Median home value (log)")
+
+mhv_map_log + mhv_histogram_log
+```
+
+## Feature engineering
+
+> add population density and median age of housing structures
+
+```{r}
+library(units)
+
+abq_data_for_model <- abq_data |> 
+  mutate(pop_density = as.numeric(set_units(total_populationE / st_area(geometry), "1/km2")),
+         median_structure_age = 2018 - median_year_builtE)  |> 
+    select(!ends_with("M")) |> 
+  rename_with(.fn = ~str_remove(.x, "E$")) |> 
+  na.omit()
+```
+
+```{r}
+head(abq_data_for_model, 3)
+```
+
+## First regression model
+
+The formula can be supplied as a string or unquoted in the function call.
+
+```{r}
+formula <- "log(median_value) ~ median_rooms + median_income + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+model1 <- lm(formula = formula, data = abq_data_for_model)
+
+summary(model1)
+```
+
+> percent going to college and median age are positively correlated, while
+> percentage foreign born and non-hispanic white is negatively correlated.
+> R2 value suggests that the model accounts for \~73% of the variance of
+> median_value.
+>
+> Check for collinearity
+
+```{r}
+library(corrr)
+
+abq_estimates <- abq_data_for_model |> 
+  select(-GEOID, -median_value, -median_year_built) |> 
+  st_drop_geometry()
+
+correlations <- correlate(abq_estimates, method = "pearson")
+```
+
+```{r}
+network_plot(correlations)
+```
+
+Collinearity can be diagnosed further by calculating the *variance inflation
+factor*
+(VIF) for the model, which takes into account not just pairwise
+correlations but the extent to which predictors are collinear with all
+other predictors. A VIF value of 1 indicates no collinearity; VIF values
+above 5 suggest a level of collinearity that has a problematic
+influence on model interpretation.
+
+```{r}
+library(car)
+
+vif(model1)
+```
+
+None are above 5, otherwise can remove and re-run. I'll remove the highest.
+
+```{r}
+formula2 <- "log(median_value) ~ median_income + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+model2 <- lm(formula = formula2, data = abq_data_for_model)
+
+summary(model2)
+```
+
+> R value doesn't change but median_income becomes a stronger predictor.
+
+```{r}
+vif(model2)
+```
+
+## Dimension reduction (PCA)
+
+```{r}
+pca <- prcomp(
+  formula = ~.,
+  data = abq_estimates,
+  scale. = TRUE,
+  center = TRUE
+)
+
+summary(pca)
+```
+
+> relate components back to variables
+
+```{r}
+pca_tibble <- pca$rotation |> 
+  as_tibble(rownames = "predictor")
+pca_tibble
+```
+
+```{r}
+pca_tibble |> 
+  select(predictor:PC5) |> 
+  pivot_longer(PC1:PC5, names_to = "component", values_to = "value") |> 
+  ggplot(aes(x = value, y = predictor)) +
+  geom_col(fill = "darkgreen", color = "darkgreen", alpha = 0.5) +
+  facet_wrap(~component, nrow = 1) +
+  labs(y = NULL, x = "Value") +
+  theme_minimal()
+```
+
+`percent_ooh`, `pct_white`, `pct_college`, `median_rooms`, `median_income`
+and `median_age` load negatively, `pop_density` and `foregn_born` load
+positively.
+
+```{r}
+components <- predict(pca, abq_estimates)
+
+abq_pca <- abq_data_for_model |> 
+  select(GEOID, median_value) |> 
+  cbind(components)
+
+ggplot(abq_pca, aes(fill = PC1)) +
+  geom_sf(color = NA) +
+  theme_void() +
+  scale_fill_viridis_c()
+```
+
+```{r}
+pca_formula <- paste0("log(median_value) ~ ",
+                      paste0('PC', 1:6, collapse = ' + '))
+
+pca_model <- lm(formula = pca_formula, data = abq_pca)
+
+summary(pca_model)
+```
