@@ -1,0 +1,177 @@
+---
+title: "08.4-Geographically Weighted Regression"
+output: 
+  md_document:
+    variant: gfm
+date: "2025-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Geographically weighted regression
+
+A way to look at local variation from neighborhood to neighborhood in the
+relationship between predictors and outcomes. It uses a kernel weighting
+function (distance-decay).
+
+$$
+Y_i=\alpha_i+\sum^m_{k=1}\beta_{ik}X_{ik}+\epsilon_i
+$$
+
+where the model intercept, parameters, and error term are all
+location-specific. Notably, $\beta_{ik}$ represents a *local regression
+coefficient* for predictor $k$ (of the total number of predictors $m$) that
+is specific to location $i$.
+
+## Prepare data
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(sf)
+```
+
+```{r}
+nm_counties <- c("Valencia", "Bernalillo","Sandoval", 
+                 "Santa Fe", "Los Alamos")
+
+variables_to_get <- c(
+  median_value = "B25077_001",
+  median_rooms = "B25018_001",
+  median_income = "DP03_0062",
+  total_population = "B01003_001",
+  median_age = "B01002_001",
+  pct_college = "DP02_0068P",
+  pct_foreign_born = "DP02_0094P",
+  pct_white = "DP05_0077P",
+  median_year_built = "B25037_001",
+  percent_ooh = "DP04_0046P"
+)
+
+abq_data <- get_acs(
+  geography = "tract", 
+  variables = variables_to_get,
+  state = "NM",
+  geometry = T,
+  county = nm_counties,
+  output = "wide",
+  year = 2020
+) |> 
+  select(-NAME) |> 
+  st_transform(32113)
+
+library(units)
+
+abq_data_for_model <- abq_data |> 
+  mutate(pop_density = as.numeric(set_units(total_populationE / st_area(geometry), "1/km2")),
+         median_structure_age = 2018 - median_year_builtE)  |> 
+    select(!ends_with("M")) |> 
+  rename_with(.fn = ~str_remove(.x, "E$")) |> 
+  na.omit()
+
+formula1 <- "log(median_value) ~ median_rooms + median_income + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+model1 <- lm(formula = formula1, data = abq_data_for_model)
+
+summary(model1)
+```
+
+## Choosing a bandwidth
+
+> -   Fixed: uses a cutoff distance
+> -   Adaptive: uses nearest neighbors
+>
+> Census tracts vary widely in size, so adaptive kernels are usually used.
+>
+> GWmodel can help choose, but object must be converted from `sf` to
+> `SpatialPolygonsDataFrame`.
+
+```{r}
+library(GWmodel)
+library(sf)
+```
+
+```{r}
+bw <- bw.gwr(
+  formula = formula1,
+  data = abq_data_for_model,
+  kernel = "bisquare",
+  adaptive = TRUE
+) 
+```
+
+```{r}
+bw
+```
+
+## Fitting and evaluating the GWR model
+
+```{r}
+gw_model <- gwr.basic(
+  formula = formula1,
+  data = abq_data_for_model,
+  bw = bw,
+  kernel = "bisquare", 
+  adaptive = TRUE
+)
+gw_model
+```
+
+```{r}
+names(gw_model)
+```
+
+> `SDF` is a `SpatialPolygonsDataFrame` that can be mapped.
+
+```{r}
+gw_model_results <- gw_model$SDF |> 
+  st_as_sf()
+
+names(gw_model_results)
+```
+
+> Map the local R-squared
+
+```{r}
+ggplot(gw_model_results, aes(fill = Local_R2)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c() +
+  theme_void()
+  
+```
+
+> The model performs better in the Santa Fe and Los Alamos regions and worse
+> in Bernalillo County and near Albuquerque.
+
+```{r eval=FALSE}
+library(mapview)
+mapview(gw_model_results, zcol = "Local_R2")
+```
+
+> Visualize local parameter estimate variation
+
+```{r}
+ggplot(gw_model_results, aes(fill = pct_college)) +
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Local β for \npct_college")  
+```
+
+```{r}
+ggplot(gw_model_results, aes(fill = pct_white)) +
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Local β for \npct_white") 
+```
+
+```{r}
+ggplot(gw_model_results, aes(fill = median_structure_age)) +
+  geom_sf(color = NA) + 
+  scale_fill_viridis_c() + 
+  theme_void() + 
+  labs(fill = "Local β for \nmedian_structure_age") 
+```
