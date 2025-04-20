@@ -1,0 +1,194 @@
+---
+title: "08.3-SpatialRegression"
+output: 
+  md_document:
+    variant: gfm
+date: "2025-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+library(tidycensus)
+library(tidyverse)
+library(sf)
+```
+
+# Spatial regression
+
+> check residuals for model
+
+```{r}
+nm_counties <- c("Valencia", "Bernalillo","Sandoval", 
+                 "Santa Fe", "Los Alamos")
+
+variables_to_get <- c(
+  median_value = "B25077_001",
+  median_rooms = "B25018_001",
+  median_income = "DP03_0062",
+  total_population = "B01003_001",
+  median_age = "B01002_001",
+  pct_college = "DP02_0068P",
+  pct_foreign_born = "DP02_0094P",
+  pct_white = "DP05_0077P",
+  median_year_built = "B25037_001",
+  percent_ooh = "DP04_0046P"
+)
+
+abq_data <- get_acs(
+  geography = "tract", 
+  variables = variables_to_get,
+  state = "NM",
+  geometry = T,
+  county = nm_counties,
+  output = "wide",
+  year = 2020
+) |> 
+  select(-NAME) |> 
+  st_transform(32113)
+
+library(units)
+
+abq_data_for_model <- abq_data |> 
+  mutate(pop_density = as.numeric(set_units(total_populationE / st_area(geometry), "1/km2")),
+         median_structure_age = 2018 - median_year_builtE)  |> 
+    select(!ends_with("M")) |> 
+  rename_with(.fn = ~str_remove(.x, "E$")) |> 
+  na.omit()
+
+formula1 <- "log(median_value) ~ median_rooms + median_income + pct_college + pct_foreign_born + pct_white + median_age + median_structure_age + percent_ooh + pop_density + total_population"
+
+model1 <- lm(formula = formula1, data = abq_data_for_model)
+
+summary(model1)
+```
+
+```{r}
+abq_data_for_model$residuals <- residuals(model1)
+
+ggplot(abq_data_for_model, aes(x = residuals)) +
+  geom_histogram(bins = 50, alpha = 0.5, 
+                 color = "navy", fill = "navy") +
+  theme_minimal()
+```
+
+> Evaluate the degree that the model's performance depends on spatial
+> autocorrelation
+
+```{r}
+library(spdep)
+
+wts <- abq_data_for_model |> 
+  poly2nb() |> 
+  nb2listw()
+
+moran.test(abq_data_for_model$residuals, wts)
+```
+
+> Low but statistically significant
+
+```{r}
+abq_data_for_model$lagged_residuals <- lag.listw(wts, abq_data_for_model$residuals)
+
+ggplot(abq_data_for_model, aes(x = residuals, y = lagged_residuals)) +
+  theme_minimal() +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red")
+```
+
+> The residuals have positive autocorrelation, so must use spatial
+> regression methods
+
+## Spatial regression methods
+
+> Spatial lag models account for \*spatial spillover effects\*, spatial
+> error models include a spatial lag in the error term to account for
+> spatial processes in the residuals.
+
+### Spatial lag models
+
+By including a spatial lag of the outcome variable, the model accounts for
+spatial spillover effects.
+
+$$
+Y_i=\alpha+\rho Y_{lag−i}+\sum_k \beta_kX_{ki}+ϵ_i
+$$ where
+
+$$
+Y_{lag−i}=\sum_j w_{ij}Y_j
+$$
+
+```{r}
+library(spatialreg)
+
+lag_model <- lagsarlm(
+  formula = formula1,
+  data = abq_data_for_model,
+  listw = wts
+)
+
+summary(lag_model, Nagelkerke = TRUE)
+```
+
+Similar results but much less dramatic. Rho is positive and statistically
+significant, indicative of spatial spillover effects.
+
+### Spatial error models
+
+$$
+Y_i=\alpha + \sum_k \beta_kX_{ki}+u_i
+$$
+
+where
+
+$$
+u_i=\lambda u_{lag−i}+\epsilon
+$$
+
+and
+
+$$
+u_{lag−i}=\sum_j w_{ij}u_j
+$$
+
+```{r}
+error_model <- errorsarlm(
+  formula = formula1,
+  data = abq_data_for_model,
+  listw = wts
+)
+
+summary(error_model, Nagelkirke = T)
+```
+
+> large and significant $\lambda$ illustrates the importance of accounting
+> for spatial autocorrelation.
+
+## Selecting the model
+
+The two types of models can also be evaluated with respect to some
+quantitative metrics. For example, we can re-compute Moran’s I over the
+model residuals to see if the spatial model has resolved our problems with
+spatial dependence
+
+```{r}
+moran.test(lag_model$residuals, wts)
+```
+
+```{r}
+moran.test(error_model$residuals, wts)
+```
+
+> Both models reduce Moran's $I$, but the error model does better.
+
+```{r}
+lm.RStests(
+  model1,
+  wts,
+  test = c("LMerr", "LMlag", "RLMerr", "RLMlag")
+)
+```
+
+All are large an statistically significant.
