@@ -1,0 +1,242 @@
+---
+title: "09-CensusMicrodata"
+output: 
+  md_document:
+    variant: gfm
+date: "2025-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Census Microdata
+
+## Basic usage
+
+```{r}
+library(tidycensus)
+```
+
+Request 1-year 2023 ACS with sex, age and household type
+
+```{r}
+nm_pums <- get_pums(
+  variables = c("SEX", "AGEP", "HHT"),
+  state = "NM",
+  survey = "acs1",
+  year = 2023
+)
+head(nm_pums)
+```
+
+```{r}
+nrow(nm_pums)
+```
+
+-   `SERIALNO`: a serial number that uniquely identifies households in the
+    sample;
+-   `SPORDER`: the order of the person in the household, which when combined
+    with `SERIALNO` uniquely identifies a person;
+-   `WGTP`: the household weight;
+-   `PWGTP`: the person weight;
+-   `ST`: the state FIPS code.
+
+In general, the weights can be interpreted as the number of observations
+represented by the row, so `PWGPT` is the number of people.
+
+Inferences about population characteristics can be made by summing over
+the weights columns. For example, let’s say we want to get an estimate
+of the number of people in New Mexico who are 50 years old in 2019, and
+compare this with the total population in New Mexico.
+
+```{r}
+library(tidyverse)
+
+nm_age_50 <- filter(nm_pums, AGEP == 50)
+
+print(sum(nm_pums$PWGTP))
+```
+
+```{r}
+print(sum(nm_age_50$PWGTP))
+```
+
+> There is a column for households and one for persons
+
+```{r}
+nm_hh_example <- filter(nm_pums, SERIALNO == "2023HU0000811")
+nm_hh_example
+```
+
+Household includes two males ages 37 and 16, three females 37, 9 and 21. HHT
+of 1 means married couple household.
+
+To determine the number of households in the dataset, sum the WGTP column
+per household.
+
+```{r}
+nm_households <- filter(nm_pums, SPORDER == 1)
+
+sum(nm_households$WGTP)
+```
+
+### Including vacant units
+
+```{r}
+nm_with_vacant <- get_pums(
+  variables = c("SEX", "AGEP", "HHT"),
+  state = "NM",
+  survey = "acs1",
+  year = 2023,
+  return_vacant = TRUE
+) |> 
+  arrange(VACS)
+```
+
+```{r}
+head(nm_with_vacant)
+```
+
+Vacant housing units do not have person-level characteristics
+
+## Working with PUMS variables
+
+```{r eval=FALSE}
+View(pums_variables)
+```
+
+-   `var_code` gives you the variable codes that should be supplied to the
+    `variables` parameter (as a character vector) in
+    [`get_pums()`](https://walker-data.com/tidycensus/reference/get_pums.html).
+    These variables will be represented in the columns of your output
+    dataset.
+-   `var_label` is a more informative description of the variable’s topic.
+-   `data_type` is one of `"chr"`, for categorical variables that will be
+    returned as R character strings, or `"num"`, for variables that will be
+    returned as numeric.
+-   `val_min` and `val_max` provide information about
+    the meaning of the data values. For categorical variables, these two
+    columns will be the same; for numeric variables, they will give you the
+    possible range of data values.
+-   `val_label` contains the value labels, which are particularly important
+    for understanding the content of categorical variables.
+
+### Recoding PUMS variables
+
+Get additional contextual information
+
+```{r}
+nm_pums_recoded <- get_pums(
+  variables = c("SEX", "AGEP", "HHT"),
+  state = "NM",
+  survey = "acs1",
+  year = 2023,
+  recode = TRUE
+)
+head(nm_pums_recoded)
+```
+
+### Variable filters
+
+To reduce the size of the data returned, can subset by filtering variables.
+For example to return only women between 30 and 49 from 5-year PUMS
+
+```{r}
+nm_pums_filtered <- get_pums(
+  variables = c("SEX", "AGEP", "HHT"),
+  state = "NM",
+  survey = "acs5",
+  variables_filter = list(
+    SEX = 2,
+    AGEP = 30:49
+  ),
+  year = 2023
+)
+head(nm_pums_filtered)
+```
+
+```{r}
+wy_pums_filtered <- get_pums(
+  variables = c("SEX", "AGEP", "HHT"),
+  state = "WY",
+  survey = "acs5",
+  variables_filter = list(
+    SEX = 2,
+    AGEP = 30:49
+  ),
+  year = 2019
+)
+```
+
+## Public Use Microdata Areas
+
+Smallest available geographies identiifiable in PUMS datasets, usually
+between 100k and 200k people, redrawn with each census.
+
+```{r}
+library(tigris)
+options(tigris_use_cache = T)
+
+nm_pumas <- pumas(state = "NM", cb = T, year = 2020)
+
+nm_pumas |> 
+  ggplot() +
+  geom_sf() +
+  theme_void()
+```
+
+```{r}
+nrow(nm_pumas)
+```
+
+```{r}
+unique(nm_pumas$NAMELSAD20)
+```
+
+## Working with PUMAs in PUMS data
+
+```{r}
+nm_age_by_puma <- get_pums(
+  variables = c("PUMA", "AGEP"),
+  state = "NM",
+  survey = "acs5",
+  year = 2023
+)
+head(nm_age_by_puma)
+```
+
+PUMA IDs are replicated across states, so the `PUMA` column should be
+combined with the `ST` column to uniquely identify PUMAs when performing
+multi-state analyses.
+
+The `puma` argument in
+[`get_pums()`](https://walker-data.com/tidycensus/reference/get_pums.html)
+can also be used to obtain data for a specific PUMA or multiple PUMAs. Like
+the `variables_filter` parameter, `puma` uses a query on the API side to
+reduce long download times for users only interested in a geographical
+subset of data.
+
+```{r}
+nm_puma_subset <- get_pums(
+  variables = "AGEP",
+  state = "NM",
+  survey = "acs5",
+  puma = "00400",
+  year = 2023
+)
+nm_puma_subset
+```
+
+### Multi-state queries
+
+```{r}
+two_state_puma_subset <- get_pums(
+  variables = "AGEP",
+  state = "multiple",
+  survey = "acs5",
+  puma = c("NM" = "00400", "AZ" = "00400"),
+  year = 2023
+)
+two_state_puma_subset
+```
