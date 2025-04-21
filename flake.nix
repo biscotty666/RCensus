@@ -39,7 +39,11 @@
             rPackages.car
             rPackages.spatialreg
             rPackages.GWmodel
+            rPackages.survey
+            rPackages.srvyr
             rPackages.tidygeocoder
+            rPackages.ipumsr
+            rPackages.RPostgres
             rPackages.trajr
             rPackages.devtools
             rPackages.flowmapblue
