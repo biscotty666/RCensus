@@ -1,0 +1,107 @@
+---
+title: "11.1-NHGIS"
+output: 
+  md_document:
+    variant: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Working with NHGIS historical data
+
+The example in this section will illustrate an applied workflow using NHGIS and its companion R package, **ipumsr** ([Ellis and Burk 2020](https://walker-data.com/census-r/references.html#ref-ellis_and_burk2020)) to map geographies of immigration in New York City from the 1910 Census.
+
+```{r message=FALSE}
+library(ipumsr)
+library(tidyverse)
+```
+
+```{r}
+nyc_1910_shp <- read_ipums_sf(
+  "data/nhgis0001_shape/nhgis0001_shapefile_tl2000_us_tract_1910.zip",
+  file_select = "US_tract_1910.shp")
+
+nyc_data <- read_nhgis("data/nhgis0001_csv.zip")
+```
+
+```{r}
+nyc_1910 <- ipums_shape_left_join(
+  nyc_data,
+  nyc_1910_shp,
+  by = "GISJOIN"
+) |> 
+  filter(str_detect(GISJOIN, "G36"))
+```
+
+```{r}
+nyc_1910
+```
+
+```{r eval=FALSE}
+View(sf::st_drop_geometry(nyc_1910))
+```
+
+```{r}
+library(sf)
+nyc_1910_p <- st_transform(nyc_1910, 6538)
+plot(nyc_1910_p$geometry)
+```
+
+As there is no “total population” column in the dataset, the code below uses **dplyr**’s [`rowwise()`](https://dplyr.tidyverse.org/reference/rowwise.html) and [`c_across()`](https://dplyr.tidyverse.org/reference/c_across.html) functions to perform row-wise calculations and sum across the columns `A60001` through `A60007`.
+
+Interestingly, there were only three races, white, black and other. A60005 is described "foreign-born white". There is no corresponding category for non-white.
+
+```{r}
+nyc_pctfb <- nyc_1910_p |> 
+  rowwise() |> 
+  mutate(total = sum(c_across(A60001:A60007))) |> 
+  ungroup() |> 
+  transmute(
+    tract_id = GISJOIN,
+    pct_fb = A60005 / total
+  )
+```
+
+```{r}
+ggplot(nyc_pctfb, aes(fill = pct_fb)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(option = "rocket",
+                       labels = scales::percent,
+                       direction = -1) +
+  theme_void(base_family = "Verdana") + 
+  labs(title = "Percent foreign-born by Census tract, 1910",
+       subtitle = "New York City",
+       caption =  "Data source: NHGIS",
+       fill = "Percentage")  
+```
+
+For example, the number of Italy-born residents by Census tract is represented in the column `A6G014`
+
+```{r}
+library(tidycensus)
+
+italy_dots <- nyc_1910_p |> 
+  as_dot_density(
+    value = "A6G014",
+    values_per_dot = 100
+  )
+
+nyc_base <- nyc_1910_p |> 
+  st_union()
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = nyc_base, size = 0.1) +
+  geom_sf(data = italy_dots, shape = ".", color = "darkgreen") +
+  theme_void(base_family = "Verdana") +
+  labs(title = "Italy-born population in New York City, 1910",
+       subtitle = "1 dot = 100 people",
+       caption = "Data source: NHGIS")
+```
+
+```{r}
+nyc_data$GISJOIN
+```
