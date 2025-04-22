@@ -1,0 +1,98 @@
+---
+title: "11.2-CompleteCountMicrodata"
+output: 
+  md_document:
+    variant: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Complete Count Historical Microdata
+
+```{r}
+library(RPostgres)
+library(tidyverse)
+library(dbplyr)
+```
+
+## Loading data
+
+```{r}
+conn <- dbConnect(
+  drv = Postgres(),
+  user = "census",
+  password = "",
+  host = "localhost",
+  port = "5432",
+  dbname = "census"
+)
+```
+
+```{r}
+census1910 <- tbl(conn, in_schema("ipums", "usa"))
+
+census1910
+```
+
+## Analyzing big Census microdata
+
+```{r}
+census1910 |> summarize(n())
+```
+
+```{r}
+census1910 |> 
+  filter(AGE > 17, STATEFIP == "48") |> 
+  group_by(SEX, LIT) |> 
+  summarise(num = n())
+```
+
+```{r}
+census1910 |> 
+  filter(AGE > 17, STATEFIP == "48") |> 
+  group_by(SEX, LIT) |> 
+  summarise(num = n()) |> 
+  show_query()
+```
+
+If an analyst wants the result of a database operation to be brought into R as an R object rather than as a database view, the [`collect()`](https://dplyr.tidyverse.org/reference/compute.html) function can be used at the end of a pipeline to load data directly. A companion function from **ipumsr**, [`ipums_collect()`](https://rdrr.io/pkg/ipumsr/man/ipums_collect.html), will add variable and value labels to the collected data based on an IPUMS codebook.
+
+```{r}
+literacy_props <- census1910 |> 
+  filter(AGE > 18) |> 
+  group_by(STATEFIP, SEX, LIT) |> 
+  summarise(num = n()) |> 
+  group_by(STATEFIP, SEX) |> 
+  mutate(total = sum(num, na.rm = T)) |> 
+  ungroup() |> 
+  mutate(prop = num / total) |> 
+  filter(LIT == 4) |> 
+  collect()
+
+state_names <- tigris::fips_codes |> 
+  select(state_code, state_name) |> 
+  distinct()
+
+
+literacy_props_with_name <- literacy_props %>%
+  mutate(STATEFIP = str_pad(STATEFIP, 2, "left", "0")) %>%
+  left_join(state_names, by = c("STATEFIP" = "state_code")) %>%
+  mutate(sex = ifelse(SEX == 1, "Male", "Female")) 
+
+```
+
+```{r fig.width=10, fig.height=8}
+ggplot(literacy_props_with_name,
+       aes(x = prop, y = reorder(state_name, prop),
+           color = sex)) +
+  geom_line(aes(group = state_name), color = "gray10") +
+  geom_point(size = 2.5) +
+  theme_minimal() +
+  scale_color_manual(values = c(Male = "navy", Female = "darkred")) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(x = "Percent fully literate, 1910",
+       color = "",
+       y = "")
+```

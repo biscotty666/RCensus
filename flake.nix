@@ -1,24 +1,38 @@
 {
   description = "A basic flake with a shell";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-  inputs.systems.url = "github:nix-systems/default";
-  inputs.flake-utils = {
-    url = "github:numtide/flake-utils";
-    inputs.systems.follows = "systems";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    systems.url = "github:nix-systems/default";
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+      inputs.systems.follows = "systems";
+    };
+    devDB.url = "github:hermann-p/nix-postgres-dev-db";
+    devDB.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
-    { nixpkgs, flake-utils, ... }:
+    { nixpkgs, flake-utils, devDB, ... }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        db = devDB.outputs.packages.${system};
       in
       {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = [ pkgs.bashInteractive ];
           buildInputs = with pkgs; [
             R
+            postgresql_15
+            db.start-database
+            db.stop-database
+            db.psql-wrapped
+            pgadmin4-desktopmode
+            dbeaver-bin
+            rPackages.dbplyr
+            rPackages.usethis
+            rPackages.censusapi
             rPackages.pagedown
             rPackages.tidyverse
             rPackages.sf
@@ -85,6 +99,9 @@
             texlive.combined.scheme-full
             rstudio
           ];
+          shellHook = ''
+            export PG_ROOT=$(git rev-parse --show-toplevel)
+          '';
         };
       }
     );
