@@ -1,0 +1,245 @@
+---
+title: "11.3-OtherUSGDatasets"
+output: 
+  md_document:
+    variant: gfm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# Other USG datasets
+
+## censusapi
+
+For datasets not available with tidycensus.
+
+```{r message=FALSE}
+library(censusapi)
+```
+
+```{r eval=FALSE}
+listCensusApis()
+```
+
+```{r}
+tx_econ17 <- getCensus(
+  name = "ecnbasic",
+  vintage = 2017,
+  vars = c("EMP", "PAYANN", "GEO_ID"),
+  region = "county:*",
+  regionin = "state:48",
+  NAICS2017 = 72
+)
+tx_econ17 |> head()
+```
+
+```{r}
+nm_econ17 <- getCensus(
+  name = "ecnbasic",
+  vintage = 2017,
+  vars = c("EMP", "PAYANN", "GEO_ID"),
+  region = "county:*",
+  regionin = "state:35",
+  NAICS2017 = 72
+)
+nm_econ17 |> head()
+```
+
+```{r message=FALSE}
+library(tigris)
+library(tidyverse)
+options(tigris_use_cache = TRUE)
+```
+
+```{r message=FALSE}
+us_youth_sahie <- getCensus(
+  name = "timeseries/healthins/sahie",
+  vars = c("GEOID", "PCTUI_PT"),
+  region = "county:*",
+  regionin = "state:*",
+  time = 2019,
+  AGECAT = 4
+)
+
+us_counties <- counties(cb = T,
+                        resolution = "20m",
+                        year = 2019) |> 
+  shift_geometry(position = "outside") |> 
+  inner_join(us_youth_sahie, by = "GEOID")
+```
+
+```{r}
+ggplot(us_counties, aes(fill = PCTUI_PT)) +
+  geom_sf(color = NA) +
+  theme_void() +
+  scale_fill_viridis_c() +
+  labs(fill = "% uninsured ",
+       caption = "Data source: US Census Bureau Small Area\nHealth Insurance Estimates via the censusapi R package",
+       title = "  Percent uninsured under age 19 by county, 2019")  
+```
+
+## Labor markets - lehdr
+
+Longitudinal and Employer-Household Dynamics (LEHD) Origin-Destination Employment Statistics (LODES) data.
+
+[Documentation](https://lehd.ces.census.gov/data/lodes/LODES7/LODESTechDoc7.5.pdf)
+
+-    [`grab_lodes()`](https://rdrr.io/pkg/lehdr/man/grab_lodes.html),: downloads a LODES file of a specified `lodes_type` (either `"rac"` for residential, `"wac"` for workplace, or `"od"` for origin-destination) for a given state and year
+-    `agg_geo` parameter: roll up estimates to higher levels of aggregation
+-   `state_part = "main"` argument below captures within-state commuters
+-   `state_part = "aux"` to get commuters from out-of-state
+-   `use_cache = TRUE` stores downloaded LODES data in a cache directory
+
+```{r message=FALSE}
+library(lehdr)
+library(tidycensus)
+library(sf)
+library(tidyverse)
+library(tigris)
+```
+
+```{r}
+nm_lodes_od <- grab_lodes(
+  state = "nm",
+  year = 2018,
+  lodes_type = "od", 
+  agg_geo = "tract",
+  state_part = "main",
+  use_cache = T
+)
+head(nm_lodes_od)
+```
+
+For example, the workflow below illustrates how to use LODES data to understand the origins of commuters to the Microsoft campus (represented by its Census tract) in Redmond, Washington. Commuters from LODES will be normalized by the total population age 18 and up, acquired with **tidycensus** for 2018 Census tracts in Seattle-area counties. The dataset `ms_commuters` will include Census tract geometries (obtained with `geometry = TRUE` in **tidycensus**) and an estimate of the number of Microsoft-area commuters per 1000 adults in that Census tract.
+
+```{r message=FALSE}
+seattle_adults <- get_acs(
+  geography = "tract",
+  variables = "S0101_C01_026",
+  state = "WA",
+  county = c("King", "Kitsap", "Pierce", "Snohomish"),
+  year = 2018,
+  geometry = T
+)
+
+wa_lodes_od <- grab_lodes(
+  state = "wa",
+  year = 2018,
+  lodes_type = "od",
+  agg_geo = "tract",
+  state_part = "main",
+  use_cache = TRUE
+)
+
+microsoft <- wa_lodes_od |> 
+  filter(w_tract == "53033022803")  # microsoft location
+
+ms_commuters <- seattle_adults |> 
+  left_join(microsoft, by = c("GEOID" = "h_tract")) |> 
+  mutate(ms_per_1000 = 1000 * (S000 / estimate)) |> 
+  st_transform(6596) |> 
+  erase_water(area_threshold = 0.99)
+```
+
+```{r}
+ms_commuters |> ggplot(aes(fill = ms_per_1000)) +
+  geom_sf(color = NA) +
+  theme_void() +
+  scale_fill_viridis_c(option = "cividis") +
+  labs(title = "Microsoft commuters per 1000 adults",
+       subtitle = "2018 LODES data, Seattle-area counties",
+       fill = "Rate per 1000")  
+```
+
+## Bureau of Labor Statistics - blscrapeR
+
+```{r}
+library(blscrapeR)
+
+KEY <- Sys.getenv("BLS_KEY")
+```
+
+```{r eval=FALSE}
+series_ids |> 
+  filter(str_detect(series_title, "Men")) |> 
+  filter(str_detect(series_title, "Hispanic")) |> 
+  filter(str_detect(series_title, "Unemployment"))
+```
+
+The example below illustrates this for data on the [Current Employment Statistics](https://www.bls.gov/ces/), for which the series ID [is formatted as follows](https://www.bls.gov/help/hlpforma.htm#SA):
+
+-   Positions 1-2: The prefix (in this example, `SA`)
+-   Position 3: The seasonal adjustment code (either `S`, for seasonally adjusted, or `U`, for unadjusted)
+-   Positions 4-5: The two-digit state FIPS code
+-   Positions 6-10: The [five-digit area code](https://download.bls.gov/pub/time.series/sm/sm.area), which should be set to `00000` if an entire state is requested.
+-   Positions 11-18: The [super sector/industry code](https://download.bls.gov/pub/time.series/sm/sm.industry)
+-   Positions 19-20: The [data type code](https://download.bls.gov/pub/time.series/sm/sm.data_type)
+
+> [Instructions](https://www.bls.gov/help/hlpforma.htm)
+
+ABQ area code 10740
+
+Accommodation and food services 70720000
+
+For some reason, New Mexico does not return valid data. This is Vermont
+
+```{r}
+vt_accom <- bls_api(seriesid = "SMU50000007072100001",
+                     startyear = 2020, 
+                     endyear = 2024)
+```
+
+```{r}
+vt_accom |> head()
+```
+
+```{r}
+vt_accom |> 
+  mutate(period_order = rev(1:nrow(vt_accom))) |> 
+  ggplot(aes(x = period_order, y = value, group = 1)) +
+  geom_line(color = "darkgreen") + 
+  theme_minimal() + 
+  scale_y_continuous(limits = c(0, max(vt_accom$value) + 1)) + 
+  scale_x_continuous(breaks = seq(1, 54, 12),
+                     labels = paste("Jan", 2020:2024)) + 
+  labs(x = "",
+       y = "Number of jobs (in 1000s)",
+       title = "Accommodation employment in Vermont",
+       subtitle = "Data source: BLS Current Employment Statistics")
+```
+
+## Agricultural data
+
+```{r}
+library(tidyUSDA)
+
+usda_key <- Sys.getenv("USDA_KEY")
+```
+
+Now, let’s see which US counties produce have the most acres devoted to cucumbers. To use the [`getQuickstat()`](https://bradlindblad.github.io/tidyusda/reference/getQuickstat.html) function effectively, it is helpful to construct a query first at <https://quickstats.nass.usda.gov/> and see what options are available, then bring those options as arguments into R.
+
+```{r}
+cucumbers <- getQuickstat(
+  key = usda_key,
+  program = "CENSUS",
+  data_item = "CUCUMBERS, FRESH MARKET - ACRES HARVESTED",
+  sector = "CROPS",
+  group = "VEGETABLES",
+  commodity = "CUCUMBERS",
+  category = "AREA HARVESTED",
+  domain = "TOTAL",
+  geographic_level = "COUNTY",
+  year = "2017"
+)
+```
+
+```{r}
+cucumbers |> 
+  select(state_name, county_name, Value) |> 
+  arrange(desc(Value)) |> 
+  head()
+```
+
+## 

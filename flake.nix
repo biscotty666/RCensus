@@ -32,7 +32,9 @@
             dbeaver-bin
             rPackages.dbplyr
             rPackages.usethis
-            rPackages.censusapi
+            rPackages.lehdr
+            rPackages.tidyUSDA
+            rPackages.blscrapeR
             rPackages.pagedown
             rPackages.tidyverse
             rPackages.sf
@@ -54,6 +56,8 @@
             rPackages.spatialreg
             rPackages.GWmodel
             rPackages.survey
+            rPackages.httr
+            rPackages.jsonlite
             rPackages.srvyr
             rPackages.tidygeocoder
             rPackages.ipumsr
@@ -62,6 +66,7 @@
             rPackages.devtools
             rPackages.flowmapblue
             rPackages.tidycensus
+            rPackages.censusapi
             rPackages.worldbank
             rPackages.wbstats
             rPackages.spocc
