@@ -20,7 +20,7 @@
         db = devDB.outputs.packages.${system};
       in
       {
-        devShell = with pkgs; mkShell {
+        devShells.default = with pkgs; mkShell {
           nativeBuildInputs = [ bashInteractive ];
           buildInputs = [
             R
