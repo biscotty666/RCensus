@@ -1,0 +1,23 @@
+---
+title: "10-AnalyzingCensusMicrodata"
+output: 
+  md_document:
+    variant: gfm
+date: "2025-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+# NHGIS historical data
+
+Data citation
+
+Steven Manson, Jonathan Schroeder, David Van Riper, Katherine Knowles, Tracy Kugler, Finn Roberts, and Steven Ruggles. IPUMS National Historical Geographic Information System: Version 19.0 [dataset]. Minneapolis, MN: IPUMS. 2024. <http://doi.org/10.18128/D050.V19.0>
+
+The example below uses `read_nhgis_sf()` to read in spatial and demographic data on immigrants in New York City in 1910. As the 1910 shapefile folder includes both NYC Census tracts and a separate dataset with US counties, the top-level folder should be unzipped, `shape_file` pointed to the second-level zipped folder, and the `shape_layer` argument used to exclusively read in the tracts. The [`filter()`](https://dplyr.tidyverse.org/reference/filter.html) call will drop Census tracts that do not have corresponding data (so, outside NYC).
+
+```{r}
+library(ipumsr)
+```
