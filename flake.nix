@@ -13,7 +13,14 @@
 
   outputs =
     { self, nixpkgs, flake-utils, devDB, ... }:
-    flake-utils.lib.eachDefaultSystem (
+    let supportedSystems = [
+         "x86_64-linux"
+         "x86_64-darwin"
+         "aarch64-linux"
+         "aarch64-darwin"      
+    ];
+    in
+    flake-utils.lib.eachSystem supportedSystems (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
