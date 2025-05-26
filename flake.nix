@@ -12,17 +12,17 @@
   };
 
   outputs =
-    { nixpkgs, flake-utils, devDB, ... }:
+    { self, nixpkgs, flake-utils, devDB, ... }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs { inherit system; };
         db = devDB.outputs.packages.${system};
       in
       {
-        devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ pkgs.bashInteractive ];
-          buildInputs = with pkgs; [
+        devShell = with pkgs; mkShell {
+          nativeBuildInputs = [ bashInteractive ];
+          buildInputs = [
             R
             postgresql_15
             db.start-database
