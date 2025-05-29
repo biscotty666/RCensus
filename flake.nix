@@ -42,7 +42,7 @@
             texlive.combined.scheme-full
             rstudio
             ( with rPackages; [
-            dbplyr
+              dbplyr
               usethis
               lehdr
               tidyUSDA
