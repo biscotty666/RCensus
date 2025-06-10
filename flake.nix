@@ -46,11 +46,14 @@
               usethis
               lehdr
               tidyUSDA
+              janitor
               blscrapeR
               pagedown
               tidyverse
               sf
               terra
+              choroplethr
+              choroplethrMaps
               leaflet
               leaflet_extras
               crsuggest
