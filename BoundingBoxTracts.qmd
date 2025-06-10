@@ -1,0 +1,95 @@
+---
+title: "Bounding Boxes and Census Tracts"
+output: 
+  md_document:
+    variant: gfm
+---
+
+[Article](https://medium.com/@eappelson/unveiling-spatial-demographics-using-bounding-boxes-and-census-tracts-in-r-2d5ce08698b4)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+
+```{r}
+#| message: false
+
+library(tidyverse)
+library(janitor)
+library(sf)
+```
+
+```{r}
+df <- data.frame(location = c("Spring St.",
+                              "Albany Ave.",
+                              "Academy Green Park",
+                              "Spring St.",
+                              "420 Broadway"),
+                 stops = c(10, 12, 47, 94, 1),
+                 stop_id = c(1,2,3,4,5)
+                 )
+```
+
+```{r}
+df <- df %>%
+  mutate(
+    location = str_replace(location, "Hwy.", "Highway"),
+    location = str_replace(location, "Expy.", "Expressway"),
+    location = str_replace(location, "Dr.", "Drive"),
+    location = str_replace(location, "Rd.", "Road"),
+    location = str_replace(location, "Blvd.", " Boulevard"),
+    location = str_replace(location, "Av.", "Avenue"),
+    location = str_replace(location, "St.", "Street"),
+    location = str_replace(location, "Ln.", "Lane"),
+    location = str_replace(location, "Sq.", "Square"),
+    location = str_replace(location, "Tr.", "Trail"),
+    location = str_replace(location, "Cir.", "Circle"),
+    location = paste0(location, ", Kingston, New York") # replace with the county and state you are working on  
+  )
+```
+
+```{r}
+df
+```
+
+```{r}
+#| message: false
+
+library(osmdata)
+```
+
+```{r}
+getbb("Academy Green Park, Kingston New York")
+```
+
+```{r}
+library(tidycensus)
+```
+
+```{r}
+race_vars <- load_variables(2020, "pl") |> 
+  filter(concept == "RACE")
+```
+
+```{r}
+census_data <- get_decennial(
+  geography = "tract",
+  variables = race_vars$name,
+  year = "2020", 
+  sumfile = "pl",
+  county = "Ulster County",
+  state = "New York",
+  geometry = T
+)
+```
+
+```{r}
+census_data
+```
+
+
+```{r}
+clean
+```
+
