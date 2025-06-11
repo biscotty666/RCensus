@@ -1,0 +1,295 @@
+---
+title: "BeautifulTables"
+format: html
+---
+
+[Source](https://www.youtube.com/watch?v=z0UGmMOxl-c)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+
+library(gt)
+library(tidyverse)
+library(palmerpenguins)
+```
+
+# Basic
+
+```{r}
+penguin_tbl <- penguins |> 
+    gt() |> 
+    tab_header(
+        title = md("The `palmerpenguins` dataset"),
+        subtitle = md("***Three*** years of data on penguins on three islands")
+    )
+
+penguin_tbl
+```
+
+# Aligning headers
+
+
+```{r}
+penguin_tbl |> 
+    opt_align_table_header(align = "left")
+```
+
+# Summaries and stubs
+
+```{r}
+penguins |> 
+    group_by(species) |> 
+    summarise_at(
+        .vars = c("bill_length_mm",
+                  "bill_depth_mm", 
+                  "flipper_length_mm",
+                  "body_mass_g"),
+        .funs = ~ mean(., na.rm = T)
+    ) |> 
+    gt(rowname_col = "species") |> 
+    tab_header(
+        title = md("Summary of the `palmerpenguins` dataset"),
+        subtitle = md("Using ***Three*** years of data on penguins on three islands")
+    ) |> 
+    opt_align_table_header(align = "left")
+```
+
+# Column labels
+
+```{r}
+penguin_tbl <- penguins |> 
+    group_by(species) |> 
+    summarise_at(
+        .vars = c("bill_length_mm",
+                  "bill_depth_mm", 
+                  "flipper_length_mm",
+                  "body_mass_g"),
+        .funs = ~ mean(., na.rm = T)
+    ) |> 
+    gt(rowname_col = "species") |> 
+    tab_header(
+        title = md("Summary of the `palmerpenguins` dataset"),
+        subtitle = md("Using ***Three*** years of data on penguins on three islands")
+    ) 
+penguin_tbl |> 
+    cols_label(
+      bill_length_mm = md("Bill Length<br>(mm)"), 
+      bill_depth_mm = md("Bill Depth<br>(mm)"),
+      flipper_length_mm = md("Flipper Length<br>(mm)"),
+      body_mass_g = md("Body Mass<br>(g)"),
+    ) |> 
+    opt_align_table_header(align = "left")
+```
+
+# Formatting numbers
+
+```{r}
+penguin_tbl |> 
+  cols_label(
+    bill_length_mm = md("Bill Length<br>(mm)"), 
+    bill_depth_mm = md("Bill Depth<br>(mm)"),
+    flipper_length_mm = md("Flipper Length<br>(mm)"),
+    body_mass_g = md("Body Mass<br>(kg)"),
+  ) |> 
+  opt_align_table_header(align = "left") |> 
+  fmt_number(columns = everything()) |> 
+  fmt_number(columns = body_mass_g, scale_by = 1/1000)
+```
+
+# Column widths
+
+```{r}
+penguin_tbl |> 
+  cols_label(
+    bill_length_mm = md("Bill Length<br>(mm)"), 
+    bill_depth_mm = md("Bill Depth<br>(mm)"),
+    flipper_length_mm = md("Flipper Length<br>(mm)"),
+    body_mass_g = md("Body Mass<br>(kg)"),
+  ) |> 
+  opt_align_table_header(align = "left") |> 
+  fmt_number(columns = everything()) |> 
+  fmt_number(columns = body_mass_g, scale_by = 1/1000) |> 
+  cols_width(
+    bill_length_mm ~ px(120),
+    bill_depth_mm ~ px(120),
+    flipper_length_mm ~ px(130),
+    body_mass_g ~ px(120)
+  )
+```
+
+```{r}
+penguin_tbl <- penguin_tbl |> 
+  cols_label(
+    bill_length_mm = md("Bill Length<br>(mm)"), 
+    bill_depth_mm = md("Bill Depth<br>(mm)"),
+    flipper_length_mm = md("Flipper Length<br>(mm)"),
+    body_mass_g = md("Body Mass<br>(kg)"),
+  ) |> 
+  opt_align_table_header(align = "left") |> 
+  fmt_number(columns = everything()) |> 
+  fmt_number(columns = body_mass_g, scale_by = 1/1000) |> 
+  cols_width(
+    bill_length_mm ~ px(120),
+    bill_depth_mm ~ px(120),
+    flipper_length_mm ~ px(130),
+    body_mass_g ~ px(120),
+    everything() ~ px(100),
+  )
+penguin_tbl
+```
+
+# Source notes and footnotes
+
+
+```{r}
+penguin_tbl |> 
+  tab_source_note(
+    md("Dataset is from the `palmerpenguins` **R** library")
+  ) |> 
+  tab_footnote(
+    footnote = "The largest of the penguins studied",
+    locations = cells_stub(rows = 3)
+  )
+```
+
+```{r}
+penguin_tbl |> 
+  tab_source_note(
+    md("Dataset is from the `palmerpenguins` **R** library")
+  ) |> 
+  tab_footnote(
+    footnote = "The largest of the penguins studied",
+    locations = cells_stub(rows = 3)
+  ) |> 
+  opt_footnote_marks(marks = c("*", "**", "&"))
+```
+
+```{r}
+penguin_tbl <-  penguin_tbl |> 
+  tab_source_note(
+    md("Dataset is from the `palmerpenguins` **R** library")
+  ) |> 
+  tab_footnote(
+    footnote = "The largest of the penguins studied",
+    locations = cells_stub(rows = 3)
+  ) |> 
+  tab_footnote(
+    footnote = "Flipper measured with a tape measure",
+    locations = cells_column_labels(columns = flipper_length_mm)
+  ) |> 
+  tab_footnote(
+    footnote = "And then by satellite",
+    locations = list(
+      cells_column_labels(columns = flipper_length_mm),
+      cells_body(columns = flipper_length_mm)
+    )
+  )
+penguin_tbl
+```
+
+# Customizing cell styles
+
+```{r}
+penguin_tbl |> 
+  tab_style(
+    locations = cells_body(columns = everything(),
+                           rows = 3),
+    style = list(
+      cell_fill(color = "lightblue"),
+      cell_text(color = "white")
+    )
+  ) |> 
+  tab_stubhead(label = md("Penguin *species*"))
+```
+
+# Changing font
+
+```{r}
+penguin_tbl |> 
+  tab_style(
+    locations = cells_body(columns = everything(),
+                           rows = 3),
+    style = list(
+      cell_fill(color = "lightblue"),
+      cell_text(color = "white")
+    )
+  ) |> 
+  tab_stubhead(label = md("Penguin *species*")) |> 
+  opt_table_font(font = "Helvetica")
+```
+
+```{r}
+penguin_tbl |> 
+  tab_style(
+    locations = cells_body(columns = everything(),
+                           rows = 3),
+    style = list(
+      cell_fill(color = "lightblue"),
+      cell_text(color = "white")
+    )
+  ) |> 
+  tab_stubhead(label = md("Penguin *species*")) |> 
+  opt_table_font(font = google_font("Montserrat"),
+                 weight = 600)
+```
+
+# Datacolor
+
+```{r}
+penguin_tbl |> 
+  data_color(
+    columns = c(bill_length_mm, bill_depth_mm),
+    fn = scales::col_numeric(
+      palette = c(
+        "orange", "green", "blue"
+      ),
+      domain = c(30, 50)
+    )
+  ) |> 
+  tab_stubhead(label = md("Penguin *species*")) |> 
+  opt_table_font(font = "Helvetica")
+```
+
+```{r}
+penguin_tbl |> 
+  data_color(
+    columns = c(bill_length_mm, bill_depth_mm),
+    fn = scales::col_numeric(
+      palette = c(
+        "orange", "green", "blue"
+      ),
+      domain = NULL
+    )
+  ) |> 
+  tab_stubhead(label = md("Penguin *species*")) |> 
+  opt_table_font(font = "Helvetica")
+```
+
+```{r}
+penguin_tbl |> 
+  data_color(
+    columns = bill_length_mm,
+    fn = scales::col_numeric(
+      palette = c(
+        "orange", "green", "blue"
+      ),
+      domain = c(30, 50)
+    )
+  ) |>
+  data_color(
+    columns = bill_depth_mm,
+    fn = scales::col_numeric(
+      palette = c(
+        "orange", "green", "blue"
+      ),
+      domain = c(10, 20)
+    )
+  ) |> 
+  tab_stubhead(label = md("Penguin *species*")) |> 
+  opt_table_font(font = "Helvetica")
+```
+
