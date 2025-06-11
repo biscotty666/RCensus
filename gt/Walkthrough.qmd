@@ -1,0 +1,242 @@
+---
+title: "gt Walkthrough"
+format: html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+
+library(gt)
+library(tidyverse)
+```
+
+```{r}
+data(islands)
+```
+
+```{r}
+names(islands)
+```
+
+```{r}
+islands_tbl <- 
+  tibble(
+    name = names(islands),
+    size = islands
+  ) |> 
+  slice_max(size, n = 10)
+
+islands_tbl
+```
+
+```{r}
+gt_tbl <- gt(islands_tbl)
+gt_tbl
+```
+
+# Headers
+
+```{r}
+gt_tbl <- 
+  gt_tbl |> 
+  tab_header(
+    title = "Large Landmasses of the World",
+    subtitle = "The top ten largest"
+  )
+gt_tbl
+```
+
+> With markdown
+
+```{r}
+gt(islands_tbl[1:2, ]) |> 
+  tab_header(
+    title = md("**Large Landmasses of the Worldd**"),
+    subtitle = md("The *top two* largest")
+  )
+```
+
+# Source Note
+
+```{r}
+gt_tbl <- 
+  gt_tbl |> 
+  tab_source_note(
+    source_note = "Source: The World Almanac and Book of Facts, 1975, page 406."
+  ) |>
+  tab_source_note(
+    source_note = md("Reference: McNeil, D. R. (1977) *Interactive Data Analysis*. Wiley.")
+  )
+gt_tbl
+```
+# Footnotes
+
+The helper function cells_body() can be used with the location argument to specify which data cells should be the target of the footnote. cells_body() has the two arguments columns and rows. For each of these, we can supply 
+
+- a vector of colnames or rownames
+- a vector of column/row indices
+- bare column names wrapped in c() or row labels within c(), or 
+- a select helper function (starts_with(), ends_with(), contains(), matches(), all_of(), and everything()). For rows specifically, we can use a conditional statement with column names as variables (e.g., size > 15000)
+
+```{r}
+gt_tbl <- 
+  gt_tbl |> 
+  tab_footnote(
+    footnote = "The Americas.",
+    locations = cells_body(columns = name, rows = 3:4)
+  )
+
+gt_tbl
+```
+
+```{r}
+largest <- islands_tbl |> 
+  slice_max(size, n = 1) |> 
+  pull(name)
+
+gt_tbl <- 
+  gt_tbl |> 
+  tab_footnote(
+    footnote = md("The *largest* by area."),
+    locations = cells_body(
+      columns = size,
+      rows = name == largest
+    )
+  ) |> 
+  tab_footnote(
+    footnote = "The lowest by area",
+    locations = cells_body(
+      columns = size,
+      rows = size == min(size)
+    )
+  )
+gt_tbl
+```
+
+# The Stub
+
+Indicate which column is the "stub"
+
+```{r}
+gt_tbl <- 
+  islands_tbl |> 
+  gt(rowname_col = "name")
+
+gt_tbl
+```
+
+```{r}
+gt_tbl <-
+  gt_tbl |>
+  tab_stubhead(label = "landmass")
+gt_tbl
+```
+
+```{r}
+# Display the `islands_tbl` data with a stub,
+# a heading, source notes, and footnotes
+gt_tbl <-
+  gt_tbl |>
+  tab_header(
+    title = "Large Landmasses of the World",
+    subtitle = "The top ten largest are presented"
+  ) |>
+  tab_source_note(
+    source_note = "Source: The World Almanac and Book of Facts, 1975, page 406."
+  ) |>
+  tab_source_note(
+    source_note = md("Reference: McNeil, D. R. (1977) *Interactive Data Analysis*. Wiley.")
+  ) |>
+  tab_footnote(
+    footnote = md("The **largest** by area."),
+    locations = cells_body(
+      columns = size, rows = largest
+    )
+  ) |>
+  tab_footnote(
+    footnote = "The lowest by population.",
+    locations = cells_body(
+      columns = size, rows = contains("arc")
+    )
+  )
+
+# Show the gt table
+gt_tbl
+```
+
+# Row groups
+
+```{r}
+gt_tbl
+```
+
+```{r}
+# Create three row groups with the
+# `tab_row_group()` function
+gt_tbl <-
+  gt_tbl |>
+  tab_row_group(
+    label = "continent",
+    rows = 1:6
+  ) |>
+  tab_row_group(
+    label = "country",
+    rows = c("Australia", "Greenland")
+  ) |>
+  tab_row_group(
+    label = "subregion",
+    rows = c("New Guinea", "Borneo")
+  )
+
+# Show the gt table
+gt_tbl
+```
+
+# Column labels (spans)
+
+```{r}
+data(airquality)
+
+airquality_m <- 
+  airquality |> 
+  mutate(Year = 1973L) |> 
+  slice(1:10)
+
+gt_tbl <- 
+  gt(airquality_m) |> 
+  tab_header(
+    title = "New York Air Quality Measurements",
+    subtitle = "Daily measurements in New York City (May 1-10, 1973)"
+  ) |> 
+  tab_spanner(
+    label = "Time",
+    columns = c(Year, Month, Day)
+  ) |> 
+  tab_spanner(
+    label = "Measurement",
+    columns = c(Ozone, Solar.R, Wind, Temp)
+  )
+
+gt_tbl
+```
+
+> Moving and relabling columns
+
+```{r}
+gt_tbl <- 
+  gt_tbl |> 
+  cols_move_to_start(
+    columns = c(Year, Month, Day)
+  ) |> 
+  cols_label(
+    Ozone = html("Ozone,<br>ppbV"),
+    Solar.R = html("Solar R.,<br>cal/m<sup>2</sup>"),
+    Wind = html("Wind,<br>mph"),
+    Temp = html("Temp,<br>&deg;F")
+  )
+gt_tbl
+```

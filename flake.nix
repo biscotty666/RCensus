@@ -41,6 +41,7 @@
             pandoc
             texlive.combined.scheme-full
             rstudio
+            quarto
             ( with rPackages; [
               dbplyr
               usethis
@@ -52,10 +53,13 @@
               tidyverse
               sf
               terra
-              choroplethr
-              choroplethrMaps
               leaflet
+              palmerpenguins
+              positron-bin
+              gt
+              gtsummary
               leaflet_extras
+              quarto
               crsuggest
               ggridges
               geofacet
