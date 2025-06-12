@@ -1,0 +1,276 @@
+---
+title: "gtsummary"
+format: html
+---
+
+[Source](https://www.youtube.com/watch?v=J31wxKj0x5I&t=1050s)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+
+library(gt)
+library(tidyverse)
+library(gtsummary)
+```
+
+```{r}
+sm_trial <- 
+  trial |> 
+  select(trt, age, grade, response)
+```
+
+# Regression Model summaries
+
+```{r}
+m1 <- 
+  glm(
+    response ~ age + stage,
+    data = trial,
+    family = binomial(link = "logit")
+  )
+summary(m1)
+```
+
+# Regr
+
+```{r}
+tbl_regression(m1)
+```
+
+> Customize
+
+```{r}
+tbl_regression(
+  m1,
+  exponentiate = TRUE   # Instead of Log(OR)
+) |> 
+  add_global_p() |>     # Add the p-value for T Stage
+  add_glance_table(
+    include = c(nobs, logLik, AIC, BIC)
+  )
+```
+
+```{r}
+tbl_regression(
+  m1,
+  exponentiate = TRUE   # Instead of Log(OR)
+) |> 
+  add_global_p() |>     # Add the p-value for T Stage
+  add_glance_source_note(
+    include = c(nobs, logLik, AIC, BIC)
+  )
+```
+
+# Univariate models
+
+```{r}
+tbl_uvreg <- sm_trial |> 
+  tbl_uvregression(
+    method = glm,
+    y = response,
+    method.args = list(family = binomial),
+    exponentiate = T
+  )
+tbl_uvreg
+```
+
+# Inline text
+
+The odds ratio for age is `r inline_text(tbl_uvreg, variable = age)`.
+
+# Displaying multiple tables together
+
+> merge for horizontal
+
+```{r}
+library(survival)  # for `coxph` method
+```
+
+```{r}
+#Univariate table
+
+tbl_uvsurv <- 
+  trial |> 
+  select(age, grade, death, ttdeath) |> 
+  tbl_uvregression(
+    method = coxph,
+    y = Surv(ttdeath, death),
+    exponentiate = T
+  ) |> 
+  add_global_p()
+
+# Multivariate table
+
+tbl_mvsurv <- 
+  coxph(
+    Surv(ttdeath, death) ~ age + grade,
+    data = trial
+  ) |> 
+  tbl_regression(
+    exponentiate = T
+  ) |> 
+  add_global_p()
+```
+
+```{r}
+tbl_merge(
+  list(tbl_uvsurv, tbl_mvsurv),
+  tab_spanner = c("**Univariable**", "**Multivariable**")
+)
+```
+
+> stack for vertical
+
+
+```{r}
+# Unadjusted model
+t3 <- 
+  coxph(Surv(ttdeath, death) ~ trt,
+        data = trial) |> 
+  tbl_regression(
+    show_single_row = trt,         # Combine the three treatment types
+    label = trt ~ "Drub B vs A",
+    exponentiate = T
+  )
+
+# Adjusted model
+t4 <- 
+  coxph(Surv(ttdeath, death) ~
+          trt + grade + stage + marker,
+        data = trial) |> 
+  tbl_regression(
+    show_single_row = trt,
+    label = trt ~ "Drug B vs A",
+    exponentiate = T,
+    include = "trt"
+  )
+```
+
+```{r}
+tbl_stack(
+  list(t3, t4),
+  group_header = c("Unadjusted", "Adjusted")
+)
+```
+
+# Stratified tables
+
+```{r}
+sm_trial |> 
+  mutate(grade = paste("Grade", grade)) |> 
+  tbl_strata(
+    strata = grade,
+    ~tbl_summary(.x, by = trt, missing = "no") |> 
+      modify_header(all_stat_cols() ~ "**{level}**")
+  )
+```
+
+# Theme basics
+
+> Default theme
+
+```{r}
+reset_gtsummary_theme()
+
+no_theme <- 
+  tbl_regression(m1, exponentiate = T) |> 
+  modify_caption("Default Theme")
+no_theme
+```
+
+> JAMA theme
+
+```{r}
+#| message: false
+#| 
+theme_gtsummary_journal(journal = "jama")
+
+jama_theme <- 
+  tbl_regression(m1, exponentiate = T) |> 
+  modify_caption(title = "Journal Theme (JAMA)")
+
+jama_theme
+```
+
+# Taiwan Traditional Chinese
+
+```{r}
+#| message: false
+
+reset_gtsummary_theme()
+
+theme_gtsummary_language(language = "zh-tw")
+
+lang_theme <- 
+  tbl_regression(m1, exponentiate = T) |> 
+  modify_caption("Language Theme (Chinese)")
+lang_theme
+```
+
+```{r}
+#| message: false
+
+reset_gtsummary_theme()
+
+theme_gtsummary_compact()
+
+compact_theme <- 
+  tbl_regression(m1, exponentiate = T) |> 
+  modify_caption("Compact Theme")
+compact_theme
+```
+
+# Custom Themes
+
+```{r}
+my_theme <- 
+  list(
+    "pkgwide-fn:pvalue_fun" = function (x) style_pvalue(x, digits = 2),
+    "as_gt-lst:addl_cmds" = list(
+      tab_spanner = rlang::expr(tab_options(table.font.size = 'small')),
+      user_added1 = rlang::expr(tab_header(
+        title = "ACME Corp", subtitle = "For Internal Use Only"
+      )),
+      user_added2 = rlang::expr(tab_source_note(
+        source_note = paste("Table created", Sys.Date())
+      )),
+      user_added3 = rlang::expr(opt_row_striping()),
+      user_added4 = rlang::expr(opt_table_lines("none"))
+    )
+  )
+```
+
+```{r}
+#| message: false
+
+reset_gtsummary_theme()
+
+set_gtsummary_theme(my_theme)
+
+my_theme <- 
+  tbl_regression(m1, exponentiate = T) |> 
+  modify_caption("My Theme")
+my_theme
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,235 @@
+---
+title: "gtsummary"
+format: html
+---
+
+[Source](https://www.youtube.com/watch?v=J31wxKj0x5I&t=1050s)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+
+library(gt)
+library(tidyverse)
+library(gtsummary)
+```
+
+```{r}
+head(trial)
+```
+
+```{r}
+sm_trial <- 
+  trial |> 
+  select(trt, age, grade, response)
+```
+
+# `tbl_summary`()
+
+Automatically detects type of variable (continuous, categorical).
+
+```{r}
+tbl_summary_1 <- 
+  sm_trial |> 
+  select(-trt) |> 
+  tbl_summary()
+tbl_summary_1
+```
+
+```{r}
+tbl_summary_2 <-
+  sm_trial |> 
+  tbl_summary(
+    by = trt,
+    type = age ~ "continuous2",
+    statistic = 
+      list(
+        age ~ c("{mean} ({sd})", "{min}, {max}"),
+        response ~ "{n} / {N} ({p}%)"
+      ),
+    label = grade ~ "Pathological tumor grade",
+    digits = age ~ 1
+  )
+tbl_summary_2
+```
+
+# Add-on functions
+
+## p- and q-values
+
+```{r}
+tbl_summary_3a <- 
+  sm_trial |> 
+  tbl_summary(
+    by = trt
+  ) |> 
+  add_p() |> 
+  add_q(method = "bonferroni")
+tbl_summary_3a
+```
+
+## Difference between groups
+
+```{r}
+tbl_summary_3ab <- 
+  trial |> 
+  select(trt, marker, response) |> 
+  tbl_summary(
+    by = trt,
+    statistic = list(
+      marker  ~ "{mean} ({sd})",
+      response ~ "{p}%"
+    ),
+    missing = "no"
+  ) |> 
+  add_difference()
+tbl_summary_3ab
+```
+
+## Add overall (totals)
+
+```{r}
+tbl_summary_3b <- 
+  sm_trial |> 
+  tbl_summary(
+    by = trt,
+    missing = "no"
+  ) |> 
+  add_overall() |> 
+  add_n() |> 
+  add_stat_label(
+    label = all_categorical() ~ "No. (%)"
+  )
+tbl_summary_3b
+```
+
+# Bold and italics
+
+```{r}
+tbl_summary_4 <- 
+  sm_trial |> 
+  tbl_summary(
+    by = trt
+  ) |> 
+  add_p() |> 
+  bold_labels() |> 
+  italicize_levels() |> 
+  bold_p(t = 0.8)
+tbl_summary_4
+```
+
+# Modify
+
+> To see header names, use `show_header_names()`
+
+```{r}
+sm_trial |> 
+  select(age, response, trt) |> 
+  tbl_summary(
+    by = trt, missing = "no"
+  ) |> 
+  show_header_names()
+```
+
+```{r}
+tbl_summary_5 <- sm_trial |> 
+  select(age, response, trt) |> 
+  tbl_summary(
+    by = trt, missing = "no"
+  ) |> 
+  modify_header(
+    update = list(
+      stat_1 ~ "**A**",
+      stat_2 ~ "**B**"
+    )
+  ) |> 
+  modify_spanning_header(
+    all_stat_cols() ~ "**Drug**"
+  ) |> 
+  modify_footnote(
+    update = all_stat_cols() ~
+      "median (IQR) for continuous; n (%) for categorical"
+  )
+tbl_summary_5
+```
+
+# Cross-tabulation
+
+```{r}
+tbl_cross_1 <- 
+  sm_trial |> 
+  tbl_cross(
+    row = trt,
+    col = grade,
+    percent = "row",
+    margin = "row"          # Adds a row for Total
+  ) |> 
+  add_p(source_note = TRUE) # places p-value in footnote
+tbl_cross_1
+```
+
+# Continuous summaries
+
+This is not working
+
+```{r}
+#| eval: false
+
+
+tbl_continuous_1 <- 
+
+trial |> 
+  tbl_continuous(
+    variable = age,
+    by = trt,
+    include = grade,
+    statistic = ~"{mean} ({sd})"
+  )
+
+tbl_continuous(
+  data,
+  variable,
+  include = everything(),
+  digits = NULL,
+  by = NULL,
+  statistic = everything() ~ "{median} ({p25}, {p75})",
+  label = NULL,
+  value = NULL
+)
+
+tbl_continuous_1
+
+trial |>
+  dplyr::mutate(all_subjects = 1) |>
+  tbl_continuous(
+    variable = age,
+    statistic = ~"{mean} ({sd})",
+    by = trt,
+    include = c(all_subjects, stage, grade),
+    value = all_subjects ~ 1,
+    label = list(all_subjects = "All Subjects")
+  )
+```
+
+# Survey summary
+
+```{r}
+#| warning: false
+#| message: false
+
+survey::svydesign(
+  ids = ~1,
+  data = as.data.frame(Titanic),
+  weights = ~Freq
+) |> 
+  tbl_svysummary(by = Survived) |> 
+  add_p() |> 
+  modify_spanning_header(
+    all_stat_cols() ~ "**Survived**"
+  )
+```
+
+

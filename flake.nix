@@ -44,6 +44,7 @@
             quarto
             ( with rPackages; [
               dbplyr
+              parameters
               usethis
               lehdr
               tidyUSDA
@@ -55,6 +56,7 @@
               terra
               leaflet
               palmerpenguins
+              broom_helpers
               cardx
               positron-bin
               gt
