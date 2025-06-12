@@ -55,6 +55,7 @@
               terra
               leaflet
               palmerpenguins
+              cardx
               positron-bin
               gt
               gtsummary
