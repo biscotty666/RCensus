@@ -1,0 +1,92 @@
+---
+title: "Plots in tables"
+format: html
+---
+
+[Source](https://www.youtube.com/watch?v=qFOFMed18T4)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, paged.print = FALSE)
+```
+
+```{r}
+#| message: false
+
+library(gt)
+library(tidyverse)
+data(penguins)
+```
+
+# Basic
+
+```{r}
+penguin_weights <- penguins |> 
+  summarise(
+    min = min(body_mass_g, na.rm = T),
+    mean = mean(body_mass_g, na.rm = T),
+    max = max(body_mass_g, na.rm = T),
+    .by = "species"
+  )
+```
+```{r}
+penguin_weights |> 
+  gt() |> 
+  tab_spanner(
+    label = "Penguin\'s Weight",
+    columns = -species
+  ) |> 
+  cols_label_with(fn = str_to_title) |> 
+  fmt_number(decimals = 2, scale_by = 1/1000) |> 
+  cols_align("left", columns = species)
+  
+```
+
+```{r}
+gentoo_data <- penguins |> 
+  filter(species == "Gentoo")
+gentoo_data
+```
+
+```{r}
+ggplot(gentoo_data, aes(x = body_mass_g, y = species)) +
+  geom_violin(fill = "lightblue") +
+  theme_void()
+```
+
+```{r}
+plot_violin_species <- function(my_species) {
+  penguins |> 
+    filter(species == my_species) |> 
+    ggplot(aes(x = body_mass_g, y = species)) +
+    geom_violin(fill = "lightblue") +
+    theme_void() +
+    coord_cartesian(      # ensure that all use the same scale
+      xlim = range(penguins$body_mass_g, na.rm = T)
+    )
+}
+```
+
+```{r}
+plot_violin_species("Gentoo")
+```
+
+```{r}
+penguin_weights |> 
+  mutate(Distribution = species) |> 
+  gt() |> 
+  tab_spanner(
+    label = "Penguin\'s Weight",
+    columns = -species
+  ) |> 
+  cols_label_with(fn = str_to_title) |> 
+  fmt_number(decimals = 2, scale_by = 1/1000) |> 
+  cols_align("left", columns = species) |> 
+  text_transform(
+    locations = cells_body(columns = "Distribution"),
+    fn = function(column) {
+      map(column, plot_violin_species) |> 
+        ggplot_image(height = px(50), aspect_ratio = 3)
+    }
+  )
+```
+
