@@ -7,4 +7,4 @@ data/
 .direnv
 .envrc
 Census.Rproj
-hispanic
+hispanic/data

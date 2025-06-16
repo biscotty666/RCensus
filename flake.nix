@@ -48,6 +48,7 @@
               usethis
               lehdr
               tidyUSDA
+              prettymapr
               janitor
               blscrapeR
               pagedown
@@ -61,8 +62,10 @@
               positron-bin
               gt
               gtsummary
+              gtExtras
               leaflet_extras
               quarto
+              ggspatial
               crsuggest
               ggridges
               geofacet
@@ -108,7 +111,6 @@
               mapview
               mapdeck
               cartogram
-#            rPackages.USAboundaries
               gifski
               historydata
               viridis
@@ -119,7 +121,8 @@
               htmlwidgets
               webshot
               spData
-              codetools]
+              codetools
+            ]
           )];
           shellHook = ''
             export PG_ROOT=$(git rev-parse --show-toplevel)
