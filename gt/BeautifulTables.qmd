@@ -27,7 +27,6 @@ penguin_tbl <- penguins |>
         subtitle = md("***Three*** years of data on penguins on three islands")
     )
 
-penguin_tbl
 ```
 
 # Aligning headers
