@@ -8,3 +8,5 @@ data/
 .envrc
 Census.Rproj
 hispanic/data
+hispanic/reference
+scratch
